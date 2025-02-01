@@ -1,0 +1,43 @@
+<?php
+
+use Drupal\Core\Database\SchemaObjectExistsException;
+
+/**
+ * Implements hook_schema().
+ */
+function api_sentinel_schema() {
+  $schema['api_sentinel_keys'] = [
+    'description' => 'Stores API keys for authentication',
+    'fields' => [
+      'uid' => [
+        'type' => 'int',
+        'not null' => TRUE,
+      ],
+      'api_key' => [
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => TRUE,
+      ],
+      'created' => [
+        'type' => 'int',
+        'not null' => TRUE,
+      ],
+    ],
+    'primary key' => ['uid'],
+  ];
+  return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+function api_sentinel_install() {
+  $schema = api_sentinel_schema();
+  $connection = \Drupal::database();
+
+  try {
+    $connection->schema()->createTable('api_sentinel_keys', $schema['api_sentinel_keys']);
+  } catch (SchemaObjectExistsException $e) {
+//    watchdog_exception('api_sentinel', $e);
+  }
+}

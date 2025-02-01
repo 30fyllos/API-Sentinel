@@ -1,0 +1,35 @@
+api_sentinel_keys:
+  description: 'Stores API keys for user authentication'
+  fields:
+    uid:
+      type: integer
+      description: 'User ID associated with the API key.'
+    api_key:
+      type: string
+      description: 'Hashed API key for security.'
+    created:
+      type: integer
+      description: 'Timestamp of API key creation.'
+
+api_sentinel.settings:
+  type: config_object
+  label: 'API Sentinel Settings'
+  mapping:
+    whitelist_ips:
+      type: sequence
+      label: 'Whitelisted IP Addresses'
+      sequence:
+        type: string
+    blacklist_ips:
+      type: sequence
+      label: 'Blacklisted IP Addresses'
+      sequence:
+        type: string
+    custom_auth_header:
+      type: string
+      label: 'Custom Authentication Header'
+    allowed_paths:
+      type: sequence
+      label: 'Allowed API Paths'
+      sequence:
+        type: string

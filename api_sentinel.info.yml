@@ -1,0 +1,9 @@
+name: 'API Sentinel'
+type: module
+description: 'Provides API Key authentication for REST API endpoints.'
+package: 'Custom'
+core_version_requirement: ^11
+dependencies:
+  - drupal:rest
+  - drupal:user
+  - drupal:system

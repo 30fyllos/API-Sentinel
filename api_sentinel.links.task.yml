@@ -1,0 +1,9 @@
+#api_sentinel.generate_key:
+#  title: 'Generate API Key'
+#  route_name: api_sentinel.generate_key
+#  base_route: api_sentinel.admin
+#
+#api_sentinel.revoke_key:
+#  title: 'Revoke API Key'
+#  route_name: api_sentinel.revoke_key
+#  base_route: api_sentinel.admin

@@ -1,0 +1,26 @@
+services:
+  logger.channel.api_sentinel:
+    parent: logger.channel_base
+    arguments: [ 'api_sentinel' ]
+
+  api_sentinel.auth:
+    class: 'Drupal\api_sentinel\Authentication\ApiSentinelAuthProvider'
+    arguments: ['@database', '@cache.static', '@logger.channel.api_sentinel']
+    tags:
+      - { name: authentication_provider, provider_id: 'api_sentinel_auth', priority: 10 }
+
+  api_sentinel.api_key_manager:
+    class: 'Drupal\api_sentinel\Service\ApiKeyManager'
+    arguments: ['@database', '@config.factory']
+
+#  api_sentinel.rest_resource:
+#    class: 'Drupal\api_sentinel\Plugin\rest\resource\ApiSentinelResource'
+#    arguments: ['@logger.factory', '@current_user', '@api_sentinel.auth']
+#    tags:
+#      - { name: rest.resource }
+
+  api_sentinel.event_subscriber:
+    class: 'Drupal\api_sentinel\EventSubscriber\ApiSentinelEventSubscriber'
+    arguments: ['@logger.channel.api_sentinel']
+    tags:
+      - { name: event_subscriber }

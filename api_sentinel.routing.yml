@@ -1,0 +1,49 @@
+api_sentinel.admin:
+  path: '/admin/config/api-sentinel'
+  defaults:
+    _title: 'API Sentinel'
+    _controller: 'Drupal\api_sentinel\Controller\ApiSentinelDashboardController::dashboard'
+  requirements:
+    _permission: 'administer api keys'
+  options:
+    _admin_route: TRUE
+
+api_sentinel.generate:
+  path: '/admin/config/api-sentinel/generate'
+  defaults:
+    _title: 'Generate API Key'
+    _form: 'Drupal\api_sentinel\Form\ApiKeyGenerateForm'
+  requirements:
+    _permission: 'administer api keys'
+  options:
+    _admin_route: TRUE
+
+api_sentinel.settings:
+  path: '/admin/config/api-sentinel/settings'
+  defaults:
+    _form: 'Drupal\api_sentinel\Form\ApiSentinelSettingsForm'
+    _title: 'API Sentinel Settings'
+  requirements:
+    _permission: 'administer api keys'
+
+api_sentinel.api_key_revoke_confirm:
+  path: '/api-sentinel/revoke-confirm/{uid}'
+  defaults:
+    _title: 'Api Key Regenerate Confirm'
+    _form: 'Drupal\api_sentinel\Form\ApiKeyRevokeConfirmForm'
+  requirements:
+    _permission: 'administer api keys'
+    uid: '\d+'
+  options:
+    _admin_route: TRUE
+
+api_sentinel.api_key_regenerate_confirm:
+  path: '/api-sentinel/regenerate-confirm/{uid}'
+  defaults:
+    _title: 'Api Key Regenerate Confirm'
+    _form: 'Drupal\api_sentinel\Form\ApiKeyRegenerateConfirmForm'
+  requirements:
+    _permission: 'administer api keys'
+    uid: '\d+'
+  options:
+    _admin_route: TRUE

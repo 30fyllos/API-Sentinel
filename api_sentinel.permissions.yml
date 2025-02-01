@@ -1,0 +1,4 @@
+administer api keys:
+  title: 'Administer API keys'
+  description: 'Allows users to generate and revoke API keys.'
+  restrict access: true
