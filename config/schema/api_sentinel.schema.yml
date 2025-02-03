@@ -33,3 +33,21 @@ api_sentinel.settings:
       label: 'Allowed API Paths'
       sequence:
         type: string
+    failure_limit:
+      type: integer
+      label: 'Max Failed Attempts Before Block'
+    failure_limit_time:
+      type: string
+      label: 'Failure Limit Time Period'
+    max_rate_limit:
+      type: integer
+      label: 'Max Requests Allowed'
+    max_rate_limit_time:
+      type: string
+      label: 'Rate Limit Time Period'
+    use_encryption:
+      type: boolean
+      label: 'Encrypt API keys'
+    encryption_key:
+      type: string
+      label: 'Secret Key'

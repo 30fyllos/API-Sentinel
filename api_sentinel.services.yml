@@ -11,7 +11,7 @@ services:
 
   api_sentinel.api_key_manager:
     class: 'Drupal\api_sentinel\Service\ApiKeyManager'
-    arguments: ['@database', '@config.factory']
+    arguments: ['@database', '@config.factory', '@logger.channel.api_sentinel']
 
 #  api_sentinel.rest_resource:
 #    class: 'Drupal\api_sentinel\Plugin\rest\resource\ApiSentinelResource'
@@ -24,3 +24,9 @@ services:
     arguments: ['@logger.channel.api_sentinel']
     tags:
       - { name: event_subscriber }
+
+  api_sentinel.cleanup_cron:
+    class: 'Drupal\api_sentinel\Cron\ApiKeyCleanupCron'
+    arguments: ['@database', '@logger.channel.api_sentinel']
+    tags:
+      - { name: 'scheduler.task', label: 'Clean expired API keys', method: 'cleanupExpiredKeys', schedule: '0 3 * * *' } # Runs at 3 AM daily

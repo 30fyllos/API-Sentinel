@@ -6,38 +6,116 @@ use Drupal\Core\Database\SchemaObjectExistsException;
  * Implements hook_schema().
  */
 function api_sentinel_schema() {
-  $schema['api_sentinel_keys'] = [
-    'description' => 'Stores API keys for authentication',
-    'fields' => [
-      'uid' => [
-        'type' => 'int',
-        'not null' => TRUE,
+  return [
+    'api_sentinel_keys' => [
+      'description' => 'Stores API keys for authentication',
+      'fields' => [
+        'id' => [
+          'type' => 'serial',
+          'not null' => TRUE
+        ],
+        'uid' => [
+          'type' => 'int',
+          'not null' => TRUE,
+        ],
+        'api_key' => [
+          'type' => 'varchar',
+          'length' => 256,
+          'not null' => TRUE,
+        ],
+        'api_key_sample' => [
+          'type' => 'varchar',
+          'length' => 6,
+          'not null' => TRUE,
+        ],
+        'created' => [
+          'type' => 'int',
+          'not null' => TRUE,
+        ],
+        'blocked' => [
+          'type' => 'int',
+          'not null' => TRUE,
+          'default' => 0,
+          'description' => '1 = Blocked, 0 = Active'
+        ],
+        'expires' => [
+          'type' => 'int',
+          'not null' => FALSE,
+          'description' => 'Expiration timestamp (NULL means no expiration).'
+        ],
       ],
-      'api_key' => [
-        'type' => 'varchar',
-        'length' => 64,
-        'not null' => TRUE,
+      'primary key' => [
+        'id'
       ],
-      'created' => [
-        'type' => 'int',
-        'not null' => TRUE,
+      'indexes' => [
+        'uid' => [
+          'uid'
+        ]
       ],
     ],
-    'primary key' => ['uid'],
+    'api_sentinel_usage' => [
+      'fields' => [
+        'id' => [
+          'type' => 'serial',
+          'not null' => TRUE
+        ], // Auto-increment ID
+        'key_id' => [
+          'type' => 'int',
+          'not null' => TRUE
+        ], // Link to api_sentinel_keys.id
+        'used_at' => [
+          'type' => 'int',
+          'not null' => TRUE,
+          'description' => 'Timestamp of API key usage.'
+        ],
+        'status' => [
+          'type' => 'int',
+          'not null' => TRUE,
+          'size' => 'tiny',
+          'description' => '1 = Success, 2 = Failed'
+        ],
+      ],
+      'primary key' => ['id'],
+      'indexes' => [
+        'key_id' => [
+          'key_id'
+        ]
+      ],
+    ],
   ];
-  return $schema;
 }
 
 /**
  * Implements hook_install().
+ * @throws Exception
  */
-function api_sentinel_install() {
+function api_sentinel_install(): void
+{
   $schema = api_sentinel_schema();
   $connection = \Drupal::database();
 
-  try {
-    $connection->schema()->createTable('api_sentinel_keys', $schema['api_sentinel_keys']);
-  } catch (SchemaObjectExistsException $e) {
-//    watchdog_exception('api_sentinel', $e);
+  // Prevent table recreation if it already exists.
+  if (!$connection->schema()->tableExists('api_sentinel_keys')) {
+    try {
+      $connection->schema()->createTable('api_sentinel_keys', $schema['api_sentinel_keys']);
+    } catch (SchemaObjectExistsException $e) {
+      throw new \Exception($e);
+    }
   }
+
+  $config = \Drupal::configFactory()->getEditable('api_sentinel.settings');
+  if (!$config->get('encryption_key')) {
+    $config->set('encryption_key', base64_encode(random_bytes(32)))->save();
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function api_sentinel_uninstall(): void
+{
+  $connection = \Drupal::database();
+
+  // Drop the table.
+  $connection->schema()->dropTable('api_sentinel_keys');
 }

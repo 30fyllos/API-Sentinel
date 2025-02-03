@@ -68,6 +68,12 @@ class ApiKeyGenerateForm extends FormBase {
       '#required' => TRUE,
     ];
 
+    $form['expires'] = [
+      '#type' => 'date',
+      '#title' => $this->t('Expiration Date (Optional)'),
+      '#description' => $this->t('Leave blank for no expiration.'),
+    ];
+
     $form['submit'] = [
       '#type' => 'submit',
       '#value' => $this->t('Generate API Key'),
@@ -87,12 +93,14 @@ class ApiKeyGenerateForm extends FormBase {
     $user = User::load($uid);
 
     if ($user) {
-      $apiKey = $this->apiKeyManager->generateApiKey($user);
+      $expires = $form_state->getValue('expires') ? strtotime($form_state->getValue('expires') . ' 23:59:59') : NULL;
+      $apiKey = $this->apiKeyManager->generateApiKey($user, $expires);
 
       // Store the API key securely in logs for admin reference.
-      $this->messenger()->addStatus($this->t('API key generated for %user: %key', [
+      $this->messenger()->addStatus($this->t('API key generated for %user:<br>%key<br>Expiration: %expires', [
         '%user' => $user->getDisplayName(),
         '%key' => $apiKey,
+        '%expires' => $expires ? date('d-m-Y', $expires) : 'Never',
       ]));
     }
     else {

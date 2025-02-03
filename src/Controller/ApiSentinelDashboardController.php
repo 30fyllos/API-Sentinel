@@ -2,8 +2,10 @@
 
 namespace Drupal\api_sentinel\Controller;
 
+use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Database\Connection;
+use Drupal\Core\Render\Markup;
 use Drupal\Core\Routing\UrlGeneratorInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\Core\Url;
@@ -29,16 +31,26 @@ class ApiSentinelDashboardController extends ControllerBase {
   protected UrlGeneratorInterface $urlGenerator;
 
   /**
+   * The configuration factory.
+   *
+   * @var ConfigFactoryInterface
+   */
+  protected $configFactory;
+
+  /**
    * Constructs the controller.
    *
    * @param Connection $database
    *   The database connection.
    * @param UrlGeneratorInterface $url_generator
    *    The URL generator service.
+   * @param ConfigFactoryInterface $configFactory
+   *    The configuration factory.
    */
-  public function __construct(Connection $database, UrlGeneratorInterface $url_generator) {
+  public function __construct(Connection $database, UrlGeneratorInterface $url_generator, ConfigFactoryInterface $configFactory) {
     $this->database = $database;
     $this->urlGenerator = $url_generator;
+    $this->configFactory = $configFactory;
   }
 
   /**
@@ -47,14 +59,18 @@ class ApiSentinelDashboardController extends ControllerBase {
   public static function create(ContainerInterface $container) {
     return new static(
       $container->get('database'),
-      $container->get('url_generator')
+      $container->get('url_generator'),
+      $container->get('config.factory')
     );
   }
 
   /**
    * Builds the API Sentinel admin dashboard.
    */
-  public function dashboard() {
+  public function dashboard(): array
+  {
+//    $config = $this->configFactory->get('api_sentinel.settings');
+//    $useEncryption = $config->get('use_encryption');
     $build = [];
 
     // Dashboard
@@ -99,35 +115,84 @@ class ApiSentinelDashboardController extends ControllerBase {
     // Build API keys table
     $header = [
       $this->t('User ID'),
-      $this->t('API Key (Last 6 chars)'),
+      $this->t('API Key'),
+      $this->t('Expires'),
       $this->t('Requests in Last Hour'),
       $this->t('Last Access'),
+      $this->t('Status'),
       $this->t('Actions'),
     ];
 
     $query = $this->database->select('api_sentinel_keys', 'ask')
-      ->fields('ask', ['uid', 'api_key', 'created'])
+      ->fields('ask', ['id', 'uid', 'api_key_sample', 'created', 'expires', 'blocked'])
       ->execute();
 
     $rows = [];
     foreach ($query as $record) {
       $uid = $record->uid;
-      $apiKey = $record->api_key;
-      $lastAccess = date('Y-m-d H:i:s', $record->created);
+//      if ($useEncryption) {
+//        $apiKeyDisplay = \Drupal::service('api_sentinel.api_key_manager')->decryptValue($record->api_key);
+//      } else {
+//        $apiKeyDisplay = '****' . substr($record->api_key, -6);  // Show only last 6 characters
+//      }
+      $apiKeyDisplay = '****' . $record->api_key_sample;
+      $expires = $record->expires ? date('d-m-Y H:i:s', $record->expires) : 'Never';
+      $created = date('d-m-Y H:i:s', $record->created);
+      $status = $record->blocked ? $this->t('❌ Blocked') : $this->t('✅ Active');
 
       $cacheKey = "api_sentinel_rate_limit:{$record->uid}";
       $cache = \Drupal::cache()->get($cacheKey);
       $requestCount = $cache ? $cache->data : 0;
 
+      $dialogAttributes = [
+        'attributes' => [
+          'class' => [
+            'use-ajax'
+          ],
+          'data-dialog-type' => 'modal',
+          'data-dialog-options' => json_encode([
+            'width' => 600
+          ])
+        ]
+      ];
+
+      // Generate action links
+      $actions = [
+        '#type' => 'dropbutton',
+        '#dropbutton_type' => 'small',
+        '#links' => [
+          'revoke' => [
+            'title' => $this->t('Revoke'),
+            'url' => Url::fromRoute('api_sentinel.api_key_revoke_confirm', ['uid' => $uid]),
+          ],
+          'regenerate' => [
+            'title' => $this->t('Regenerate'),
+            'url' => Url::fromRoute('api_sentinel.api_key_regenerate_confirm', ['uid' => $uid]),
+          ],
+          'view_key' => [
+            'title' => $this->t('Show API Key'),
+            'url' => Url::fromRoute('api_sentinel.show_api_key', ['key_id' => $record->id], $dialogAttributes)
+          ],
+          'usage' => [
+            'title' => $this->t('View Usage'),
+            'url' => Url::fromRoute('api_sentinel.usage_dialog', ['key_id' => $record->id], $dialogAttributes)
+          ],
+          'block' => [
+            'title' => $record->blocked ? $this->t('Unblock') : $this->t('Block'),
+            'url' => Url::fromRoute('api_sentinel.toggle_block', ['key_id' => $record->id]),
+          ]
+        ]
+      ];
+
+
       $rows[] = [
         'uid' => $uid,
-        'api_key' => $apiKey,
+        'api_key_sample' => $apiKeyDisplay,
+        'expires' => $expires,
         'requests' => $requestCount,
-        'last_access' => $lastAccess,
-        'actions' => $this->t('<a href="@revokeUrl">Revoke</a> | <a href="@regenerateUrl">Regenerate</a>', [
-          '@revokeUrl' => $this->getRevokeUrl($record->uid),
-          '@regenerateUrl' => $this->getRegenerateUrl($record->uid),
-        ]),
+        'created' => $created,
+        'status' => $status,
+        'actions' => \Drupal::service('renderer')->render($actions),
       ];
     }
 
@@ -136,36 +201,13 @@ class ApiSentinelDashboardController extends ControllerBase {
       '#header' => $header,
       '#rows' => $rows,
       '#empty' => $this->t('No API keys found.'),
+      '#attached' => [
+        'library' => [
+          'core/drupal.dialog.ajax'
+        ],
+      ],
     ];
 
     return $build;
-  }
-
-  /**
-   * Generates the revoke URL for a user.
-   *
-   * @param int $uid
-   *   The user ID.
-   *
-   * @return string
-   *   The URL to revoke the API key.
-   */
-  protected function getRevokeUrl(int $uid): string
-  {
-    return $this->urlGenerator->generateFromRoute('api_sentinel.api_key_revoke_confirm', ['uid' => $uid]);
-  }
-
-  /**
-   * Generates the regenerate URL for a user.
-   *
-   * @param int $uid
-   *   The user ID.
-   *
-   * @return string
-   *   The URL to regenerate the API key.
-   */
-  protected function getRegenerateUrl(int $uid): string
-  {
-    return $this->urlGenerator->generateFromRoute('api_sentinel.api_key_regenerate_confirm', ['uid' => $uid]);
   }
 }
