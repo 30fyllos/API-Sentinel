@@ -5,7 +5,6 @@ namespace Drupal\api_sentinel\Controller;
 use Drupal\Core\Controller\ControllerBase;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\Core\Database\Connection;
-use Symfony\Component\HttpFoundation\JsonResponse;
 
 /**
  * Controller for displaying API key usage.
@@ -38,22 +37,33 @@ class ApiSentinelUsageController extends ControllerBase {
   /**
    * Displays API usage statistics in a dialog.
    */
-  public function usageDialog($key_id): array
+  public function usageDialog($key_id, $timeframe = 'all'): array
   {
-    $query = $this->database->select('api_sentinel_usage', 'asu')
-      ->fields('asu', ['key_id']);
-//      ->addExpression('MAX(used_at)', 'last_used')
-//      ->addExpression("SUM(CASE WHEN asu.status = 1 THEN 1 ELSE 0 END)", 'success_count')
-//      ->addExpression("SUM(CASE WHEN asu.status = 0 THEN 1 ELSE 0 END)", 'failed_count')
-//      ->condition('key_id', $key_id)
-//      ->groupBy('key_id')
-//      ->execute();
-//      ->fetchAll();
-    $query->addExpression()
-    dd($query);
+    $timeCondition = '';
+    if ($timeframe === '24h') {
+      $timeCondition = strtotime('-1 day');
+    } elseif ($timeframe === '7d') {
+      $timeCondition = strtotime('-7 days');
+    } elseif ($timeframe === '30d') {
+      $timeCondition = strtotime('-30 days');
+    }
+
+    $query = $this->database->select('api_sentinel_usage', 'asu');
+    $query->fields('asu', ['key_id']);
+    $query->addExpression('MAX(used_at)', 'last_used');
+    $query->addExpression("SUM(CASE WHEN asu.status = 1 THEN 1 ELSE 0 END)", 'success_count');
+    $query->addExpression("SUM(CASE WHEN asu.status = 0 THEN 1 ELSE 0 END)", 'failed_count');
+    $query->condition('key_id', $key_id);
+    $query->groupBy('key_id');
+
+    if ($timeCondition) {
+      $query->condition('used_at', $timeCondition, '>');
+    }
+
+    $results = $query->execute()->fetchAll();
 
     $rows = [];
-    foreach ($query as $record) {
+    foreach ($results as $record) {
       $rows[] = [
         'last_used' => !empty($record->last_used) ? date('Y-m-d H:i:s', $record->last_used) : '-',
         'success_count' => $record->success_count ?? 0,
@@ -65,8 +75,8 @@ class ApiSentinelUsageController extends ControllerBase {
       '#type' => 'table',
       '#header' => [
         $this->t('Last Used'),
-        $this->t('Succeeded'),
-        $this->t('Failed'),
+        $this->t('Successful Requests'),
+        $this->t('Failed Requests'),
       ],
       '#rows' => $rows,
       '#empty' => $this->t('No API usage data found for this key.'),

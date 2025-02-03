@@ -37,7 +37,7 @@ class ApiKeyCleanupCron {
    */
   public function cleanupExpiredKeys(): void
   {
-    $threshold = strtotime('-3 months'); // Get timestamp for 3 months ago
+    $threshold = strtotime('-1 months'); // Get timestamp for 3 months ago
 
     $deletedCount = $this->database->delete('api_sentinel_keys')
       ->condition('expires', 0, '>')
@@ -51,7 +51,7 @@ class ApiKeyCleanupCron {
 
   public function cleanupUsageLogs(): void
   {
-    $threshold = strtotime('-6 months'); // Keep only 6 months of logs
+    $threshold = strtotime('-1 months'); // Keep only 6 months of logs
 
     $deletedCount = $this->database->delete('api_sentinel_usage')
       ->condition('used_at', $threshold, '<')

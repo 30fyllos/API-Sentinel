@@ -23,9 +23,20 @@ function api_sentinel_schema() {
           'length' => 256,
           'not null' => TRUE,
         ],
+        'api_key_sample' => [
+          'type' => 'varchar',
+          'length' => 6,
+          'not null' => TRUE,
+        ],
         'created' => [
           'type' => 'int',
           'not null' => TRUE,
+        ],
+        'blocked' => [
+          'type' => 'int',
+          'not null' => TRUE,
+          'default' => 0,
+          'description' => '1 = Blocked, 0 = Active'
         ],
         'expires' => [
           'type' => 'int',
@@ -61,8 +72,8 @@ function api_sentinel_schema() {
           'type' => 'int',
           'not null' => TRUE,
           'size' => 'tiny',
-          'description' => 'Success or Failed'
-        ]
+          'description' => '1 = Success, 2 = Failed'
+        ],
       ],
       'primary key' => ['id'],
       'indexes' => [

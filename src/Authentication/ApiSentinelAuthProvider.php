@@ -126,13 +126,19 @@ class ApiSentinelAuthProvider implements AuthenticationProviderInterface
 
     // Check if the API key exists in the database.
     $query = $this->database->select('api_sentinel_keys', 'ask')
-      ->fields('ask', ['id', 'uid', 'expires'])
-      ->condition('ask.api_key', $config->get('store_plaintext_keys') ? $apiKey : hash('sha256', $apiKey))
+      ->fields('ask', ['id', 'uid', 'expires', 'blocked'])
+      ->condition('ask.api_key', $config->get('use_encryption') ? $apiServiceManager->encryptValue($apiKey) : hash('sha256', $apiKey))
       ->execute()
       ->fetchAssoc();
 
     if (!$query || empty($query['uid'])) {
       $this->logger->warning('Authentication failed: Invalid API key.');
+      return NULL;
+    }
+
+    if ($query['blocked']) {
+      $apiServiceManager->logKeyUsage($query['id']);
+      \Drupal::logger('api_sentinel')->warning('Blocked API key {id} attempted authentication.', ['id' => $query['id']]);
       return NULL;
     }
 
@@ -144,18 +150,28 @@ class ApiSentinelAuthProvider implements AuthenticationProviderInterface
 
     $uid = $query['uid'];
 
-    // Apply rate limiting (max 100 requests per hour).
-    $cacheKey = "api_sentinel_rate_limit:$uid";
-    $rateLimit = $this->cache->get($cacheKey);
-
-    if ($rateLimit && $rateLimit->data >= 100) {
-      $apiServiceManager->logKeyUsage($query['id']);
-      $this->logger->warning("Rate limit exceeded for user ID $uid.");
+    // Block after X failed attempts.
+    if ($apiServiceManager->blockFailedAttempt($query['id'])) {
       return NULL;
     }
 
-    // Increment request count.
-    $this->cache->set($cacheKey, ($rateLimit ? $rateLimit->data + 1 : 1), time() + 3600);
+    // Check rate limit.
+    if ($apiServiceManager->checkRateLimit($query['id'])) {
+      return NULL;
+    }
+
+      // Apply rate limiting.
+//    $cacheKey = "api_sentinel_rate_limit:$uid";
+//    $rateLimit = $this->cache->get($cacheKey);
+//
+//    if ($rateLimit && $rateLimit->data >= 100) {
+//      $apiServiceManager->logKeyUsage($query['id']);
+//      $this->logger->warning("Rate limit exceeded for user ID $uid.");
+//      return NULL;
+//    }
+//
+      // Increment request count.
+//    $this->cache->set($cacheKey, ($rateLimit ? $rateLimit->data + 1 : 1), time() + 3600);
 
     // Load the user.
     $user = User::load($uid);

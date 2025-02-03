@@ -132,6 +132,7 @@ class ApiKeyManager {
       ->key('uid', $account->id())
       ->fields([
         'api_key' => $storedKey,
+        'api_key_sample' => substr($apiKey, -6),
         'created' => time(),
         'expires' => $expires,
       ])
@@ -263,6 +264,106 @@ class ApiKeyManager {
         'status' => $status ? 1 : 0,
       ])
       ->execute();
+  }
+
+  /**
+   * Check rate limit.
+   *
+   * @param int $keyId
+   *   The api key id.
+   *
+   * @return boolean
+   *   Return true if exceeded.
+   */
+  public function checkRateLimit(int $keyId): bool
+  {
+    $config = \Drupal::config('api_sentinel.settings');
+    $maxRateLimit = $config->get('max_rate_limit');
+    // Check rate limit
+    if ($maxRateLimit > 0) {
+      $requestCount = $this->database->select('api_sentinel_usage', 'asu')
+        ->condition('key_id', $keyId)
+        ->condition('used_at', $this->convertTimeToTimestamp($config->get('max_rate_limit_time')), '>')
+        ->countQuery()
+        ->execute()
+        ->fetchField();
+
+      if ($requestCount >= $maxRateLimit) {
+        \Drupal::logger('api_sentinel')->warning('API key {id} exceeded rate limit.', ['id' => $query['id']]);
+        return TRUE;
+      }
+    }
+    return FALSE;
+  }
+
+  /**
+   * Block an api key after continuously fails.
+   *
+   * @param int $keyId
+   *   The api key id.
+   *
+   * @return bool
+   *   Return true if blocked.
+   * @throws \Exception
+   */
+  public function blockFailedAttempt(int $keyId): bool
+  {
+    $config = \Drupal::config('api_sentinel.settings');
+    $failureLimit = $config->get('failure_limit');
+
+    // Check if failure limit is reached
+    if ($failureLimit > 0) {
+      $this->database->insert('api_sentinel_usage')
+        ->fields([
+          'key_id' => $keyId,
+          'used_at' => time(),
+          'status' => 0,
+        ])
+        ->execute();
+
+      $failureCount = $this->database->select('api_sentinel_usage', 'asu')
+        ->condition('key_id', $keyId)
+        ->condition('status', 0)
+        ->condition('used_at', $this->convertTimeToTimestamp($config->get('failure_limit_time')), '>')
+        ->countQuery()
+        ->execute()
+        ->fetchField();
+
+      if ($failureCount >= $failureLimit) {
+        $this->database->update('api_sentinel_keys')
+          ->fields(['blocked' => 1])
+          ->condition('id', $keyId)
+          ->execute();
+
+        \Drupal::logger('api_sentinel')->notice('API key {id} has been blocked after {failures} failed attempts.', [
+          'id' => $keyId,
+          'failures' => $failureCount,
+        ]);
+        return TRUE;
+      }
+    }
+    return FALSE;
+  }
+
+  /**
+   * Convert time to timestamp.
+   *
+   * @param $timeString
+   *   The selected options as string.
+   * @return int
+   *   Return a timestamp.
+   */
+  public function convertTimeToTimestamp($timeString): int
+  {
+    return match ($timeString) {
+      'half_hour' => strtotime('-30 minutes'),
+      'hours_2' => strtotime('-2 hours'),
+      'hours_3' => strtotime('-3 hours'),
+      'hours_6' => strtotime('-6 hours'),
+      'half_day' => strtotime('-12 hours'),
+      'day' => strtotime('-1 day'),
+      default => strtotime('-1 hour'),
+    };
   }
 
   /**

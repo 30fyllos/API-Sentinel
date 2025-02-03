@@ -58,3 +58,25 @@ api_sentinel.usage_dialog:
     key_id: '\d+'
   options:
     _admin_route: TRUE
+
+api_sentinel.show_api_key:
+  path: '/admin/config/api-sentinel/key/{key_id}'
+  defaults:
+    _controller: 'Drupal\api_sentinel\Controller\ApiKeyDialogController::showApiKey'
+    _title: 'Show API Key'
+  requirements:
+    _permission: 'administer api keys'
+    key_id: '\d+'
+  options:
+    _admin_route: TRUE
+
+api_sentinel.toggle_block:
+  path: '/admin/config/api-sentinel/block/{key_id}'
+  defaults:
+    _controller: 'Drupal\api_sentinel\Controller\ApiKeyBlockController::toggleBlockStatus'
+    _title: 'Toggle API Key Block Status'
+  requirements:
+    _permission: 'administer api keys'
+    key_id: '\d+'
+  options:
+    _admin_route: TRUE

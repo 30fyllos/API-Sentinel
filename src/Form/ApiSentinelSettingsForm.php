@@ -59,6 +59,56 @@ class ApiSentinelSettingsForm extends ConfigFormBase {
       '#default_value' => implode("\n", $config->get('allowed_paths') ?? []),
     ];
 
+    $form['failure_limit'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Max Failed Attempts Before Block'),
+      '#default_value' => $config->get('failure_limit', 100),
+      '#description' => $this->t('If an API key fails authentication this many times, it will be blocked. Set to 0 to disable.'),
+      '#min' => 0,
+    ];
+
+    $timeLimitOptions = [
+      'half_hour' => $this->t('Half hour'),
+      'hour' => $this->t('Hour'),
+      'hours_2' => $this->t('2 Hours'),
+      'hours_3' => $this->t('3 Hours'),
+      'hours_6' => $this->t('6 Hours'),
+      'half_day' => $this->t('Half Day'),
+      'day' => $this->t('Day'),
+    ];
+
+    $form['failure_limit_time'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Failure Limit Time Per'),
+      '#options' => $timeLimitOptions,
+      '#default_value' => $config->get('failure_limit_time', 'hour'),
+      '#states' => [
+        'visible' => [
+          ':input[name="failure_limit"]' => ['!value' => '0'],
+        ],
+      ],
+    ];
+
+    $form['max_rate_limit'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Max Requests Allowed'),
+      '#default_value' => $config->get('max_rate_limit', 100),
+      '#description' => $this->t('The maximum number of API requests allowed within the selected period. Set to 0 to disable.'),
+      '#min' => 0,
+    ];
+
+    $form['max_rate_limit_time'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Rate Limit Time Period'),
+      '#options' => $timeLimitOptions,
+      '#default_value' => $config->get('failure_limit_time', 'hour'),
+      '#states' => [
+        'visible' => [
+          ':input[name="max_rate_limit"]' => ['!value' => '0'],
+        ],
+      ],
+    ];
+
     $form['use_encryption'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Encrypt API keys'),
@@ -106,6 +156,10 @@ class ApiSentinelSettingsForm extends ConfigFormBase {
       ->set('custom_auth_header', trim($form_state->getValue('custom_auth_header')))
       ->set('allowed_paths', array_filter(explode("\n", trim($form_state->getValue('allowed_paths')))))
       ->set('store_plaintext_keys', $form_state->getValue('store_plaintext_keys'))
+      ->set('failure_limit', $form_state->getValue('failure_limit'))
+      ->set('failure_limit_time', $form_state->getValue('failure_limit_time'))
+      ->set('max_rate_limit', $form_state->getValue('max_rate_limit'))
+      ->set('max_rate_limit_time', $form_state->getValue('max_rate_limit_time'))
       ->set('use_encryption', $newEncryption)
       ->set('encryption_key', $encryptionKey)
       ->save();
