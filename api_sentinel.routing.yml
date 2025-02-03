@@ -47,3 +47,14 @@ api_sentinel.api_key_regenerate_confirm:
     uid: '\d+'
   options:
     _admin_route: TRUE
+
+api_sentinel.usage_dialog:
+  path: '/admin/config/api-sentinel/usage/{key_id}'
+  defaults:
+    _controller: 'Drupal\api_sentinel\Controller\ApiSentinelUsageController::usageDialog'
+    _title: 'API Key Usage'
+  requirements:
+    _permission: 'administer api keys'
+    key_id: '\d+'
+  options:
+    _admin_route: TRUE

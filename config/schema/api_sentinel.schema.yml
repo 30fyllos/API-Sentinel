@@ -33,3 +33,9 @@ api_sentinel.settings:
       label: 'Allowed API Paths'
       sequence:
         type: string
+    use_encryption:
+      type: boolean
+      label: 'Encrypt API keys'
+    encryption_key:
+      type: string
+      label: 'Secret Key'

@@ -82,6 +82,7 @@ class ApiSentinelAuthProvider implements AuthenticationProviderInterface
     $config = \Drupal::config('api_sentinel.settings');
     $clientIp = $request->getClientIp();
     $currentPath = \Drupal::service('path.current')->getPath();
+    $apiServiceManager = \Drupal::service('api_sentinel.api_key_manager');
 
     $whitelist = $config->get('whitelist_ips') ?? [];
     $blacklist = $config->get('blacklist_ips') ?? [];
@@ -125,13 +126,19 @@ class ApiSentinelAuthProvider implements AuthenticationProviderInterface
 
     // Check if the API key exists in the database.
     $query = $this->database->select('api_sentinel_keys', 'ask')
-      ->fields('ask', ['uid'])
-      ->condition('ask.api_key', $apiKey)
+      ->fields('ask', ['id', 'uid', 'expires'])
+      ->condition('ask.api_key', $config->get('store_plaintext_keys') ? $apiKey : hash('sha256', $apiKey))
       ->execute()
       ->fetchAssoc();
 
     if (!$query || empty($query['uid'])) {
       $this->logger->warning('Authentication failed: Invalid API key.');
+      return NULL;
+    }
+
+    if ($query['expires'] && time() > $query['expires']) {
+      $apiServiceManager->logKeyUsage($query['id']);
+      \Drupal::logger('api_sentinel')->warning('API key for user {uid} has expired.', ['uid' => $query['uid']]);
       return NULL;
     }
 
@@ -142,6 +149,7 @@ class ApiSentinelAuthProvider implements AuthenticationProviderInterface
     $rateLimit = $this->cache->get($cacheKey);
 
     if ($rateLimit && $rateLimit->data >= 100) {
+      $apiServiceManager->logKeyUsage($query['id']);
       $this->logger->warning("Rate limit exceeded for user ID $uid.");
       return NULL;
     }
@@ -153,10 +161,12 @@ class ApiSentinelAuthProvider implements AuthenticationProviderInterface
     $user = User::load($uid);
 
     if ($user && $user->isActive()) {
+      $apiServiceManager->logKeyUsage($query['id'], TRUE);
       $this->logger->info('User {uid} authenticated successfully via API key.', ['uid' => $uid]);
       return $user;
     }
 
+    $apiServiceManager->logKeyUsage($query['id']);
     $this->logger->warning("Authentication failed: User ID $uid is not active.");
     return NULL;
   }

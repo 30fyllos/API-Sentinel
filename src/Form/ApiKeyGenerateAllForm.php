@@ -4,6 +4,7 @@ namespace Drupal\api_sentinel\Form;
 
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Random\RandomException;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\api_sentinel\Service\ApiKeyManager;
 use Drupal\user\Entity\Role;
@@ -78,6 +79,12 @@ class ApiKeyGenerateAllForm extends FormBase {
       }
     }
 
+    $form['expires'] = [
+      '#type' => 'date',
+      '#title' => $this->t('Expiration Date (Optional)'),
+      '#description' => $this->t('Leave blank for no expiration.'),
+    ];
+
     $form['submit'] = [
       '#type' => 'submit',
       '#value' => $this->t('Generate API Keys'),
@@ -96,6 +103,7 @@ class ApiKeyGenerateAllForm extends FormBase {
 
   /**
    * Handles form submission.
+   * @throws RandomException
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $selected_roles = array_filter($form_state->getValue('roles')); // Remove empty values
@@ -105,7 +113,9 @@ class ApiKeyGenerateAllForm extends FormBase {
       return;
     }
 
-    $count = $this->apiKeyManager->generateApiKeysForAllUsers($selected_roles);
+    $expires = $form_state->getValue('expires') ? strtotime($form_state->getValue('expires') . ' 23:59:59') : NULL;
+
+    $count = $this->apiKeyManager->generateApiKeysForAllUsers($selected_roles, $expires);
 
     if ($count > 0) {
       $this->messenger()->addStatus($this->t('%count API keys generated for users.', ['%count' => $count]));
