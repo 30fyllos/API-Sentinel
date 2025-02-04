@@ -70,8 +70,9 @@ class ApiSentinelAuthProvider implements AuthenticationProviderInterface
    */
   public function applies(Request $request): bool
   {
+    $config = \Drupal::config('api_sentinel.settings');
     // Check if an API key is provided in headers or query parameters.
-    return $request->headers->has('X-API-KEY') || $request->query->has('api_key');
+    return $request->headers->has($config->get('custom_auth_header')) || $request->query->has('api_key');
   }
 
   /**
@@ -86,7 +87,7 @@ class ApiSentinelAuthProvider implements AuthenticationProviderInterface
 
     $whitelist = $config->get('whitelist_ips') ?? [];
     $blacklist = $config->get('blacklist_ips') ?? [];
-    $customHeader = $config->get('custom_auth_header') ?? 'X-API-KEY';
+    $customHeader = $config->get('custom_auth_header');
     $allowedPaths = $config->get('allowed_paths') ?? [];
 
     // Block request if IP is blacklisted.

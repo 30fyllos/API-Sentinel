@@ -71,6 +71,7 @@ class ApiSentinelDashboardController extends ControllerBase {
   {
 //    $config = $this->configFactory->get('api_sentinel.settings');
 //    $useEncryption = $config->get('use_encryption');
+    $apiServiceManager = \Drupal::service('api_sentinel.api_key_manager');
     $build = [];
 
     // Dashboard
@@ -142,7 +143,7 @@ class ApiSentinelDashboardController extends ControllerBase {
 
       $cacheKey = "api_sentinel_rate_limit:{$record->uid}";
       $cache = \Drupal::cache()->get($cacheKey);
-      $requestCount = $cache ? $cache->data : 0;
+      $requestCount = $cache ? $cache->data : $apiServiceManager->apiKeyUsageLast($record->id);
 
       $dialogAttributes = [
         'attributes' => [
