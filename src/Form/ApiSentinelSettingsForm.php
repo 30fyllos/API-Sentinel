@@ -142,13 +142,9 @@ class ApiSentinelSettingsForm extends ConfigFormBase {
 
     // Detect if encryption setting has changed
     $previousEncryption = $config->get('use_encryption');
-    $newEncryption = $form_state->getValue('use_encryption');
+    $newEncryption = boolval($form_state->getValue('use_encryption'));
 
     $encryptionKey = trim($form_state->getValue('encryption_key'));
-    if ($newEncryption && strlen($encryptionKey) !== 32) {
-      $form_state->setErrorByName('encryption_key', $this->t('Encryption key must be exactly 32 characters long.'));
-      return;
-    }
 
     $this->config('api_sentinel.settings')
       ->set('whitelist_ips', array_filter(explode("\n", trim($form_state->getValue('whitelist_ips')))))
@@ -167,7 +163,7 @@ class ApiSentinelSettingsForm extends ConfigFormBase {
     parent::submitForm($form, $form_state);
 
     // If encryption mode changed, force key regeneration
-    if ($previousEncryption !== $newEncryption) {
+    if ($previousEncryption !== $newEncryption || $config->get('encryption_key') !== $encryptionKey) {
       \Drupal::messenger()->addWarning($this->t('API key encryption setting changed. All keys have been regenerated.'));
       \Drupal::service('api_sentinel.api_key_manager')->forceRegenerateAllKeys();
     }

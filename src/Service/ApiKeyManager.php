@@ -69,16 +69,17 @@ class ApiKeyManager {
    * Encrypts a value using AES-256.
    * @throws RandomException
    */
-  private function encryptValue($value): string
+  public function encryptValue($value): string
   {
     $config = $this->configFactory->get('api_sentinel.settings');
     $encryptionKey = $config->get('encryption_key');
 
-    if (!$encryptionKey || strlen($encryptionKey) !== 32) {
+    if (!$encryptionKey) {
       throw new \Exception('Encryption key is invalid.');
     }
 
-    $iv = random_bytes(16);
+    $iv = md5(php_uname(), true);
+
     $encrypted = openssl_encrypt($value, 'aes-256-cbc', $encryptionKey, 0, $iv);
     return base64_encode($iv . $encrypted);
   }
@@ -86,12 +87,12 @@ class ApiKeyManager {
   /**
    * Decrypts a value using AES-256.
    */
-  private function decryptValue($encryptedValue): false|string
+  public function decryptValue($encryptedValue): false|string
   {
     $config = $this->configFactory->get('api_sentinel.settings');
     $encryptionKey = $config->get('encryption_key');
 
-    if (!$encryptionKey || strlen($encryptionKey) !== 32) {
+    if (!$encryptionKey) {
       return 'Error: Invalid encryption key.';
     }
 
@@ -151,14 +152,14 @@ class ApiKeyManager {
     $storedKeys = $this->database->select('api_sentinel_keys', 'ask')
       ->fields('ask', ['uid', 'expires'])
       ->execute()
-      ->fetchCol();
+      ->fetchAll();
 
     $this->logger->warning('All API keys have been regenerated due to encryption key change.', [
       'changed_by' => \Drupal::currentUser()->id(),
     ]);
 
     foreach ($storedKeys as $storedKey) {
-      $this->generateApiKey($storedKey->uid, $storedKey->expires);
+      $this->generateApiKey(User::load($storedKey->uid), $storedKey->expires);
     }
   }
 
@@ -201,18 +202,17 @@ class ApiKeyManager {
   /**
    * Checks if a user has an API key.
    *
-   * @param AccountInterface|int $account
+   * @param AccountInterface|string $account
    *   The user account or id.
    *
    * @return bool
    *   TRUE if an API key exists, FALSE otherwise.
    */
-  public function hasApiKey(AccountInterface|int $account): bool
+  public function hasApiKey(AccountInterface|string $account): bool
   {
     if ($account instanceof AccountInterface) {
       $account = $account->id();
     }
-
     $query = $this->database->select('api_sentinel_keys', 'ask')
       ->fields('ask', ['api_key'])
       ->condition('ask.uid', $account)
@@ -225,21 +225,17 @@ class ApiKeyManager {
   /**
    * User Key expiration date.
    *
-   * @param AccountInterface|int $account
+   * @param AccountInterface $account
    *    The user account or id.
    *
    * @return int|null
    *   Api Key expiration date.
    */
-  public function apiKeyExpiration(AccountInterface|int $account): null|int
+  public function apiKeyExpiration(AccountInterface $account): null|int
   {
-    if ($account instanceof AccountInterface) {
-      $account = $account->id();
-    }
-
     return $this->database->select('api_sentinel_keys', 'ask')
       ->fields('ask', ['expires'])
-      ->condition('ask.uid', $account)
+      ->condition('ask.uid', $account->id())
       ->execute()
       ->fetchField();
   }
@@ -247,7 +243,7 @@ class ApiKeyManager {
   /**
    * Log API key usage.
    *
-   * @param int $id
+   * @param int $keyId
    *   The id of the key.
    * @param bool $status
    *   The status success or failed.
@@ -255,11 +251,11 @@ class ApiKeyManager {
    * @return void
    * @throws \Exception
    */
-  public function logKeyUsage(int $id, bool $status = FALSE): void
+  public function logKeyUsage(int $keyId, bool $status = FALSE): void
   {
     $this->database->insert('api_sentinel_usage')
       ->fields([
-        'key_id' => $id,
+        'key_id' => $keyId,
         'used_at' => time(),
         'status' => $status ? 1 : 0,
       ])
@@ -289,7 +285,7 @@ class ApiKeyManager {
         ->fetchField();
 
       if ($requestCount >= $maxRateLimit) {
-        \Drupal::logger('api_sentinel')->warning('API key {id} exceeded rate limit.', ['id' => $query['id']]);
+        \Drupal::logger('api_sentinel')->warning('API key {id} exceeded rate limit.', ['id' => $requestCount['id']]);
         return TRUE;
       }
     }
@@ -408,4 +404,23 @@ class ApiKeyManager {
     return $generatedCount;
   }
 
+  /**
+   * Api key usage.
+   *
+   * @param $key_id
+   *   The id of the api key.
+   * @param string $timeCondition
+   *   The time period to count.
+   * @return mixed
+   *   Return the times used.
+   */
+  public function apiKeyUsageLast($key_id, string $timeCondition = '-1 hour'): mixed
+  {
+    return $this->database->select('api_sentinel_usage', 'asu')
+      ->condition('asu.key_id', $key_id)
+      ->condition('asu.used_at', strtotime($timeCondition), '>')
+      ->countQuery()
+      ->execute()
+      ->fetchField();
+  }
 }
