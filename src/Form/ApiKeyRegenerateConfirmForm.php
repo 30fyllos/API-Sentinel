@@ -10,6 +10,7 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\Core\Url;
 use Drupal\user\Entity\User;
+use Random\RandomException;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -75,28 +76,28 @@ final class ApiKeyRegenerateConfirmForm extends ConfirmFormBase {
    * {@inheritdoc}
    */
   public function getCancelUrl(): Url {
-    return new Url('api_sentinel.admin');
+    return new Url('api_sentinel.dashboard');
   }
 
   /**
    * {@inheritdoc}
+   * @throws RandomException
    */
   public function submitForm(array &$form, FormStateInterface $form_state): void {
 
     $user = User::load($this->uid);
 
     if ($user) {
-      $newApiKey = $this->apiKeyManager->regenerateApiKey($user);
+      $this->apiKeyManager->regenerateApiKey($user);
 
-      $this->messenger()->addStatus($this->t('New API key for %user: %key', [
-        '%user' => $user->getDisplayName(),
-        '%key' => $newApiKey,
+      $this->messenger()->addStatus($this->t('New API key for %user.', [
+        '%user' => $user->getDisplayName()
       ]));
     } else {
       $this->messenger()->addError($this->t('Invalid user selection.'));
     }
 
-    $form_state->setRedirectUrl(new Url('api_sentinel.admin'));
+    $form_state->setRedirectUrl(new Url('api_sentinel.dashboard'));
   }
 
 }

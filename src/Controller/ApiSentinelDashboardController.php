@@ -69,8 +69,6 @@ class ApiSentinelDashboardController extends ControllerBase {
    */
   public function dashboard(): array
   {
-//    $config = $this->configFactory->get('api_sentinel.settings');
-//    $useEncryption = $config->get('use_encryption');
     $apiServiceManager = \Drupal::service('api_sentinel.api_key_manager');
     $build = [];
 
@@ -91,6 +89,13 @@ class ApiSentinelDashboardController extends ControllerBase {
         '#markup' => $this->t('Generate API key to a group of user.')
       ],
       'form' => \Drupal::formBuilder()->getForm('Drupal\api_sentinel\Form\ApiKeyGenerateAllForm'),
+    ];
+
+    // Auto Generate API Key
+    $build['generate']['auto'] = [
+      '#type' => 'fieldset',
+      '#title' => $this->t('Auto-Generate API Key'),
+      'form' => \Drupal::formBuilder()->getForm('Drupal\api_sentinel\Form\ApiKeyAutoGenerateForm'),
     ];
 
     // Generate API Key by user
@@ -116,7 +121,6 @@ class ApiSentinelDashboardController extends ControllerBase {
     // Build API keys table
     $header = [
       $this->t('User ID'),
-      $this->t('API Key'),
       $this->t('Expires'),
       $this->t('Requests in Last Hour'),
       $this->t('Last Access'),
@@ -125,18 +129,13 @@ class ApiSentinelDashboardController extends ControllerBase {
     ];
 
     $query = $this->database->select('api_sentinel_keys', 'ask')
-      ->fields('ask', ['id', 'uid', 'api_key_sample', 'created', 'expires', 'blocked'])
+      ->fields('ask', ['id', 'uid', 'created', 'expires', 'blocked'])
       ->execute();
 
     $rows = [];
     foreach ($query as $record) {
       $uid = $record->uid;
-//      if ($useEncryption) {
-//        $apiKeyDisplay = \Drupal::service('api_sentinel.api_key_manager')->decryptValue($record->api_key);
-//      } else {
-//        $apiKeyDisplay = '****' . substr($record->api_key, -6);  // Show only last 6 characters
-//      }
-      $apiKeyDisplay = '****' . $record->api_key_sample;
+
       $expires = $record->expires ? date('d-m-Y H:i:s', $record->expires) : 'Never';
       $created = date('d-m-Y H:i:s', $record->created);
       $status = $record->blocked ? $this->t('❌ Blocked') : $this->t('✅ Active');
@@ -162,25 +161,25 @@ class ApiSentinelDashboardController extends ControllerBase {
         '#type' => 'dropbutton',
         '#dropbutton_type' => 'small',
         '#links' => [
-          'revoke' => [
-            'title' => $this->t('Revoke'),
-            'url' => Url::fromRoute('api_sentinel.api_key_revoke_confirm', ['uid' => $uid]),
-          ],
-          'regenerate' => [
-            'title' => $this->t('Regenerate'),
-            'url' => Url::fromRoute('api_sentinel.api_key_regenerate_confirm', ['uid' => $uid]),
-          ],
-          'view_key' => [
-            'title' => $this->t('Show API Key'),
-            'url' => Url::fromRoute('api_sentinel.show_api_key', ['key_id' => $record->id], $dialogAttributes)
+          'block' => [
+            'title' => $record->blocked ? $this->t('Unblock') : $this->t('Block'),
+            'url' => Url::fromRoute('api_sentinel.toggle_block', ['key_id' => $record->id]),
           ],
           'usage' => [
             'title' => $this->t('View Usage'),
             'url' => Url::fromRoute('api_sentinel.usage_dialog', ['key_id' => $record->id], $dialogAttributes)
           ],
-          'block' => [
-            'title' => $record->blocked ? $this->t('Unblock') : $this->t('Block'),
-            'url' => Url::fromRoute('api_sentinel.toggle_block', ['key_id' => $record->id]),
+          'view_key' => [
+            'title' => $this->t('Show API Key'),
+            'url' => Url::fromRoute('api_sentinel.view_api_key', ['uid' => $record->uid], $dialogAttributes)
+          ],
+          'regenerate' => [
+            'title' => $this->t('Regenerate'),
+            'url' => Url::fromRoute('api_sentinel.api_key_regenerate_confirm', ['uid' => $uid]),
+          ],
+          'revoke' => [
+            'title' => $this->t('Revoke'),
+            'url' => Url::fromRoute('api_sentinel.api_key_revoke_confirm', ['uid' => $uid]),
           ]
         ]
       ];
@@ -188,7 +187,6 @@ class ApiSentinelDashboardController extends ControllerBase {
 
       $rows[] = [
         'uid' => $uid,
-        'api_key_sample' => $apiKeyDisplay,
         'expires' => $expires,
         'requests' => $requestCount,
         'created' => $created,

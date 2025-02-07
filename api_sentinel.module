@@ -1,0 +1,43 @@
+<?php
+
+use Drupal\api_sentinel\Event\CacheEvent;
+use Drupal\api_sentinel\Event\EntityCreateEvent;
+use Drupal\api_sentinel\Event\UserLoginEvent;
+use Drupal\Core\Entity\EntityInterface;
+
+/**
+ * Implements hook_user_login().
+ */
+function api_sentinel_user_login($account): void
+{
+  // Get the event dispatcher service.
+  $event_dispatcher = \Drupal::service('event_dispatcher');
+
+  // Create the event instance.
+  $event = new UserLoginEvent($account);
+
+  // Dispatch the custom event.
+  $event_dispatcher->dispatch($event, UserLoginEvent::LOGIN);
+}
+
+function api_sentinel_entity_insert(EntityInterface $entity) {
+  // Get the event dispatcher service.
+  $event_dispatcher = \Drupal::service('event_dispatcher');
+
+  // Create the event instance.
+  $event = new EntityCreateEvent($entity);
+
+  // Dispatch the custom event.
+  $event_dispatcher->dispatch($event, EntityCreateEvent::INSERT);
+}
+
+function api_sentinel_cache_flush() {
+  // Get the event dispatcher service.
+  $event_dispatcher = \Drupal::service('event_dispatcher');
+
+  // Create the event instance.
+  $event = new CacheEvent();
+
+  // Dispatch the custom event.
+  $event_dispatcher->dispatch($event, CacheEvent::FLUSH);
+}

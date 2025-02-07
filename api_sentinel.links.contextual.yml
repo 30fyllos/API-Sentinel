@@ -1,4 +1,4 @@
 api_sentinel.settings:
   title: 'API Sentinel Settings'
-  route_name: api_sentinel.admin
+  route_name: api_sentinel.dashboard
   group: admin

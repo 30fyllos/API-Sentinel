@@ -2,20 +2,26 @@
 
 namespace Drupal\api_sentinel\Service;
 
+use Drupal\api_sentinel\Enum\Timeframe;
 use Drupal\Core\Database\Connection;
 use Drupal\Core\Config\ConfigFactoryInterface;
-use Drupal\Core\Logger\LoggerChannelFactoryInterface;
-use Drupal\Core\Logger\LoggerChannelInterface;
+use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Core\Session\AccountInterface;
+use Drupal\Core\Session\AccountProxyInterface;
+use Drupal\Core\TempStore\PrivateTempStoreFactory;
+use Drupal\Core\TempStore\TempStoreException;
+use Drupal\Core\Url;
 use Drupal\user\Entity\User;
 use Psr\Log\LoggerInterface;
 use Random\RandomException;
-use Symfony\Component\HttpFoundation\Request;
 
 /**
- * Service for managing API keys in API Sentinel.
+ * Class ApiKeyManager.
+ *
+ * Provides methods to manage API keys including encryption, generation,
+ * revocation, rate limiting, and usage logging.
  */
-class ApiKeyManager {
+class ApiKeyManager implements ApiKeyManagerInterface {
 
   /**
    * The database connection.
@@ -32,6 +38,13 @@ class ApiKeyManager {
   protected ConfigFactoryInterface $configFactory;
 
   /**
+   * The cache backend.
+   *
+   * @var CacheBackendInterface
+   */
+  protected CacheBackendInterface $cache;
+
+  /**
    * The logger service.
    *
    * @var LoggerInterface
@@ -39,220 +52,241 @@ class ApiKeyManager {
   protected LoggerInterface $logger;
 
   /**
-   * Constructs the API Key Manager service.
+   * The current user service.
+   *
+   * @var AccountProxyInterface
+   */
+  protected AccountProxyInterface $currentUser;
+
+  /**
+   * The temp store factory.
+   *
+   * @var PrivateTempStoreFactory
+   */
+  protected PrivateTempStoreFactory $tempStoreFactory;
+
+  /**
+   * The notification service.
+   *
+   * @var ApiSentinelNotificationServiceInterface
+   */
+  protected ApiSentinelNotificationServiceInterface $notificationService;
+
+  /**
+   * Cached configuration settings.
+   *
+   * @var array
+   */
+  protected array $settings = [];
+
+  /**
+   * Constructs a new ApiKeyManager.
    *
    * @param Connection $database
    *   The database connection.
    * @param ConfigFactoryInterface $configFactory
    *   The configuration factory.
    * @param LoggerInterface $logger
-   *    The logger service.
+   *   The logger service.
+   * @param CacheBackendInterface $cache
+   *   The cache backend.
+   * @param AccountProxyInterface $currentUser
+   *   The current user.
+   * @param PrivateTempStoreFactory $tempStoreFactory
+   *   The temp store factory.
+   * @param ApiSentinelNotificationServiceInterface $notificationService
+   *   The service for sending API key notifications
    */
-  public function __construct(Connection $database, ConfigFactoryInterface $configFactory, LoggerInterface $logger) {
+  public function __construct(Connection $database, ConfigFactoryInterface $configFactory, LoggerInterface $logger, CacheBackendInterface $cache, AccountProxyInterface $currentUser, PrivateTempStoreFactory $tempStoreFactory, ApiSentinelNotificationServiceInterface $notificationService) {
     $this->database = $database;
     $this->configFactory = $configFactory;
     $this->logger = $logger;
+    $this->cache = $cache;
+    $this->currentUser = $currentUser;
+    $this->tempStoreFactory = $tempStoreFactory;
+    $this->notificationService = $notificationService;
+  }
+
+  /**
+   * Initializes the configuration settings if not already set.
+   */
+  protected function initSettings(): void {
+    if (empty($this->settings)) {
+      $this->settings = $this->configFactory->get('api_sentinel.settings')->getRawData();
+    }
   }
 
   /**
    * Logs API key changes.
+   *
+   * @param int $uid
+   *   The user ID.
+   * @param string $message
+   *   The log message.
    */
-  private function logKeyChange($uid, $message): void
-  {
+  protected function logKeyChange(int $uid, string $message): void {
     $this->logger->info($message, [
       'uid' => $uid,
-      'changed_by' => \Drupal::currentUser()->id(),
+      'changed_by' => $this->currentUser->id(),
     ]);
   }
 
   /**
-   * Encrypts a value using AES-256.
-   * @throws RandomException
+   * {@inheritdoc}
    */
-  public function encryptValue($value): string
+  public function getEnvValue(): string
   {
-    $config = $this->configFactory->get('api_sentinel.settings');
-    $encryptionKey = $config->get('encryption_key');
+    $env_path = dirname(DRUPAL_ROOT) . '/.env';
+
+    if (file_exists($env_path)) {
+      $env_values = parse_ini_file($env_path);
+      return $env_values['API_SENTINEL_ENCRYPTION_KEY'] ?? '';
+    }
+
+    return '';
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function encryptValue(string $value): string {
+    $this->initSettings();
+    $encryptionKey = $this->getEnvValue() ?? $this->settings['encryption_key'];
 
     if (!$encryptionKey) {
       throw new \Exception('Encryption key is invalid.');
     }
-
-    $iv = md5(php_uname(), true);
-
+    // Use a random IV for better security.
+    $iv = random_bytes(openssl_cipher_iv_length('aes-256-cbc'));
     $encrypted = openssl_encrypt($value, 'aes-256-cbc', $encryptionKey, 0, $iv);
+    // Prepend IV to the encrypted value.
     return base64_encode($iv . $encrypted);
   }
 
   /**
-   * Decrypts a value using AES-256.
+   * {@inheritdoc}
    */
-  public function decryptValue($encryptedValue): false|string
+  public function decryptValue(string $encryptedValue): false|string
   {
-    $config = $this->configFactory->get('api_sentinel.settings');
-    $encryptionKey = $config->get('encryption_key');
-
+    $this->initSettings();
+    $encryptionKey = $this->getEnvValue() ?? $this->settings['encryption_key'];
     if (!$encryptionKey) {
       return 'Error: Invalid encryption key.';
     }
-
     $data = base64_decode($encryptedValue);
-    $iv = substr($data, 0, 16);
-    $encrypted = substr($data, 16);
-
+    $ivLength = openssl_cipher_iv_length('aes-256-cbc');
+    $iv = substr($data, 0, $ivLength);
+    $encrypted = substr($data, $ivLength);
     return openssl_decrypt($encrypted, 'aes-256-cbc', $encryptionKey, 0, $iv);
   }
 
   /**
-   * Generates a new API key for a user.
-   *
-   * @param AccountInterface $account
-   *   The user account.
-   * @param int|null $expires
-   *   Expiration timestamp.
-   * @return string
-   *   The generated API key.
-   * @throws RandomException
+   * {@inheritdoc}
+   * @throws \Exception
    */
-  public function generateApiKey(AccountInterface $account, int $expires = NULL): string
+  public function generateApiKey(AccountInterface $account, ?int $expires = NULL): void
   {
-    $apiKey = base64_encode(random_bytes(32));
-    $config = $this->configFactory->get('api_sentinel.settings');
-    $useEncryption = $config->get('use_encryption');
-    $encryptionKey = $config->get('encryption_key');
-
-    // Store hashed or plaintext based on settings
-    if ($useEncryption && !empty($encryptionKey)) {
-      $storedKey = $this->encryptValue($apiKey);
-    } else {
-      $storedKey = hash('sha256', $apiKey);
+    try {
+      $apiKey = base64_encode(random_bytes(32));
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Error generating API key: @message', ['@message' => $e->getMessage()]);
+      throw $e;
     }
 
-    // Store hashed key in the database.
-    $this->database->merge('api_sentinel_keys')
+    // Merge (insert or update) the API key record.
+    $entry = $this->database->merge('api_sentinel_keys')
       ->key('uid', $account->id())
       ->fields([
-        'api_key' => $storedKey,
-        'api_key_sample' => substr($apiKey, -6),
+        'api_key' => hash('sha256', $apiKey),
+        'data' => $this->encryptValue($apiKey),
         'created' => time(),
         'expires' => $expires,
       ])
       ->execute();
 
     $this->logKeyChange($account->id(), 'Generated a new API key.');
-    return $apiKey; // Return raw key for user storage.
+    $link = Url::fromRoute('api_sentinel.view_api_key', ['uid' => $account->id()], ['absolute' => TRUE])->toString();
+    $this->notificationService->notifyNewKey($account, $apiKey, $link);
   }
 
   /**
-   * Forces regeneration of all API keys.
-   * @throws RandomException
+   * {@inheritdoc}
    */
-  public function forceRegenerateAllKeys(): void
+  public function forceRegenerateAllKeys(): int
   {
     $storedKeys = $this->database->select('api_sentinel_keys', 'ask')
       ->fields('ask', ['uid', 'expires'])
       ->execute()
       ->fetchAll();
-
     $this->logger->warning('All API keys have been regenerated due to encryption key change.', [
-      'changed_by' => \Drupal::currentUser()->id(),
+      'changed_by' => $this->currentUser->id(),
     ]);
-
+    $count = 0;
     foreach ($storedKeys as $storedKey) {
-      $this->generateApiKey(User::load($storedKey->uid), $storedKey->expires);
+      $user = User::load($storedKey->uid);
+      if ($user) {
+        $this->generateApiKey($user, $storedKey->expires);
+        $count++;
+      }
     }
+    return $count;
   }
 
   /**
-   * Revokes a user's API key.
-   *
-   * @param AccountInterface $account
-   *   The user account.
+   * {@inheritdoc}
    */
-  public function revokeApiKey(AccountInterface $account): void
-  {
+  public function revokeApiKey(AccountInterface $account): void {
     $this->database->delete('api_sentinel_keys')
       ->condition('uid', $account->id())
       ->execute();
-
     $this->logKeyChange($account->id(), 'Revoked API key.');
   }
 
   /**
-   * Regenerates an API key for a user.
-   *
-   * @param AccountInterface $account
-   *   The user account.
-   *
-   * @return string
-   *   The new API key.
-   * @throws RandomException
+   * {@inheritdoc}
    */
-  public function regenerateApiKey(AccountInterface $account): string
-  {
+  public function regenerateApiKey(AccountInterface $account): void {
     $expires = $this->apiKeyExpiration($account);
-
-    // Delete the old key.
+    // Revoke the old key.
     $this->revokeApiKey($account);
-
     // Generate a new key.
-    return $this->generateApiKey($account, $expires);
+    $this->generateApiKey($account, $expires);
   }
 
   /**
-   * Checks if a user has an API key.
-   *
-   * @param AccountInterface|string $account
-   *   The user account or id.
-   *
-   * @return bool
-   *   TRUE if an API key exists, FALSE otherwise.
+   * {@inheritdoc}
    */
-  public function hasApiKey(AccountInterface|string $account): bool
-  {
+  public function hasApiKey(AccountInterface|string $account): bool {
     if ($account instanceof AccountInterface) {
       $account = $account->id();
     }
     $query = $this->database->select('api_sentinel_keys', 'ask')
-      ->fields('ask', ['api_key'])
+      ->fields('ask', ['uid'])
       ->condition('ask.uid', $account)
       ->execute()
       ->fetchField();
-
     return !empty($query);
   }
 
   /**
-   * User Key expiration date.
-   *
-   * @param AccountInterface $account
-   *    The user account or id.
-   *
-   * @return int|null
-   *   Api Key expiration date.
+   * {@inheritdoc}
    */
-  public function apiKeyExpiration(AccountInterface $account): null|int
-  {
+  public function apiKeyExpiration(AccountInterface|string $account): ?int {
+    if ($account instanceof AccountInterface) {
+      $account = $account->id();
+    }
     return $this->database->select('api_sentinel_keys', 'ask')
       ->fields('ask', ['expires'])
-      ->condition('ask.uid', $account->id())
+      ->condition('ask.uid', $account)
       ->execute()
       ->fetchField();
   }
 
   /**
-   * Log API key usage.
-   *
-   * @param int $keyId
-   *   The id of the key.
-   * @param bool $status
-   *   The status success or failed.
-   *
-   * @return void
-   * @throws \Exception
+   * {@inheritdoc}
    */
-  public function logKeyUsage(int $keyId, bool $status = FALSE): void
-  {
+  public function logKeyUsage(int $keyId, bool $status = FALSE): void {
     $this->database->insert('api_sentinel_usage')
       ->fields([
         'key_id' => $keyId,
@@ -263,29 +297,29 @@ class ApiKeyManager {
   }
 
   /**
-   * Check rate limit.
-   *
-   * @param int $keyId
-   *   The api key id.
-   *
-   * @return boolean
-   *   Return true if exceeded.
+   * {@inheritdoc}
    */
-  public function checkRateLimit(int $keyId): bool
-  {
-    $config = \Drupal::config('api_sentinel.settings');
-    $maxRateLimit = $config->get('max_rate_limit');
-    // Check rate limit
+  public function checkRateLimit(int $keyId): bool {
+    $this->initSettings();
+    $maxRateLimit = $this->settings['max_rate_limit'] ?? 0;
     if ($maxRateLimit > 0) {
-      $requestCount = $this->database->select('api_sentinel_usage', 'asu')
-        ->condition('key_id', $keyId)
-        ->condition('used_at', $this->convertTimeToTimestamp($config->get('max_rate_limit_time')), '>')
-        ->countQuery()
-        ->execute()
-        ->fetchField();
-
+      $timeThreshold = Timeframe::fromString($this->settings['max_rate_limit_time'] ?? '1h')?->toTimestamp();
+      $cache_id = "api_sentinel:usage:{$keyId}";
+      if ($cache_item = $this->cache->get($cache_id)) {
+        $requestCount = $cache_item->data;
+      }
+      else {
+        $requestCount = (int) $this->database->select('api_sentinel_usage', 'asu')
+          ->condition('key_id', $keyId)
+          ->condition('used_at', $timeThreshold, '>')
+          ->countQuery()
+          ->execute()
+          ->fetchField();
+        // Cache the count for 60 seconds.
+        $this->cache->set($cache_id, $requestCount, time() + 60);
+      }
       if ($requestCount >= $maxRateLimit) {
-        \Drupal::logger('api_sentinel')->warning('API key {id} exceeded rate limit.', ['id' => $requestCount['id']]);
+        $this->logger->warning('API key {id} exceeded rate limit.', ['id' => $keyId]);
         return TRUE;
       }
     }
@@ -293,48 +327,28 @@ class ApiKeyManager {
   }
 
   /**
-   * Block an api key after continuously fails.
-   *
-   * @param int $keyId
-   *   The api key id.
-   *
-   * @return bool
-   *   Return true if blocked.
-   * @throws \Exception
+   * {@inheritdoc}
    */
-  public function blockFailedAttempt(int $keyId): bool
-  {
-    $config = \Drupal::config('api_sentinel.settings');
-    $failureLimit = $config->get('failure_limit');
-
-    // Check if failure limit is reached
+  public function blockFailedAttempt(int $keyId): bool {
+    $this->initSettings();
+    $failureLimit = $this->settings['failure_limit'] ?? 0;
     if ($failureLimit > 0) {
-      $this->database->insert('api_sentinel_usage')
-        ->fields([
-          'key_id' => $keyId,
-          'used_at' => time(),
-          'status' => 0,
-        ])
-        ->execute();
-
-      $failureCount = $this->database->select('api_sentinel_usage', 'asu')
-        ->condition('key_id', $keyId)
-        ->condition('status', 0)
-        ->condition('used_at', $this->convertTimeToTimestamp($config->get('failure_limit_time')), '>')
-        ->countQuery()
-        ->execute()
-        ->fetchField();
-
+      $cache_id = "api_sentinel:failures:{$keyId}";
+      $failureCount = ($this->cache->get($cache_id)) ? $this->cache->get($cache_id)->data : 0;
+      $failureCount++;
+      // Set the cache TTL based on a failure limit time; here we default to 1 hour.
+      $failureTtl = strtotime('+1 hour') - time();
+      $this->cache->set($cache_id, $failureCount, time() + $failureTtl);
       if ($failureCount >= $failureLimit) {
         $this->database->update('api_sentinel_keys')
           ->fields(['blocked' => 1])
           ->condition('id', $keyId)
           ->execute();
-
-        \Drupal::logger('api_sentinel')->notice('API key {id} has been blocked after {failures} failed attempts.', [
+        $this->logger->notice('API key {id} has been blocked after {failures} failed attempts.', [
           'id' => $keyId,
           'failures' => $failureCount,
         ]);
+        $this->cache->delete($cache_id);
         return TRUE;
       }
     }
@@ -342,82 +356,43 @@ class ApiKeyManager {
   }
 
   /**
-   * Convert time to timestamp.
-   *
-   * @param $timeString
-   *   The selected options as string.
-   * @return int
-   *   Return a timestamp.
+   * {@inheritdoc}
    */
-  public function convertTimeToTimestamp($timeString): int
+  public function generateApiKeysForAllUsers(array $roles = [], ?int $expires = NULL): int
   {
-    return match ($timeString) {
-      'half_hour' => strtotime('-30 minutes'),
-      'hours_2' => strtotime('-2 hours'),
-      'hours_3' => strtotime('-3 hours'),
-      'hours_6' => strtotime('-6 hours'),
-      'half_day' => strtotime('-12 hours'),
-      'day' => strtotime('-1 day'),
-      default => strtotime('-1 hour'),
-    };
-  }
-
-  /**
-   * Generates API keys for all users who don’t have one, filtered by role.
-   *
-   * @param array $roles
-   *   An array of role IDs to filter users. If empty, all users are included.
-   * @param int|null $expires
-   *    Expiration timestamp.
-   *
-   * @return int
-   *   The number of API keys generated.
-   * @throws RandomException
-   */
-  public function generateApiKeysForAllUsers(array $roles = [], int $expires = NULL): int
-  {
-    if (empty($roles)) return 0;
-
+    if (empty($roles)) {
+      return 0;
+    }
     $query = $this->database->select('users_field_data', 'u')
       ->fields('u', ['uid'])
       ->condition('u.uid', 1, '>') // Exclude anonymous user.
-      ->condition('u.status', 1); // Exclude blocked users.
-
+      ->condition('u.status', 1);   // Only active users.
+    // If not all authenticated users, join roles and filter.
     if (!in_array('authenticated', $roles)) {
       $query->leftJoin('user__roles', 'ur', 'u.uid = ur.entity_id');
       $query->condition('ur.roles_target_id', $roles, 'IN');
     }
-
     $users = $query->execute()->fetchCol();
-    $generatedCount = 0;
-
+    $count = 0;
     foreach ($users as $uid) {
       if (!$this->hasApiKey($uid)) {
         $user = User::load($uid);
         if ($user && $user->isActive()) {
           $this->generateApiKey($user, $expires);
-          $generatedCount++;
+          $count++;
         }
       }
     }
-
-    return $generatedCount;
+    return $count;
   }
 
   /**
-   * Api key usage.
-   *
-   * @param $key_id
-   *   The id of the api key.
-   * @param string $timeCondition
-   *   The time period to count.
-   * @return mixed
-   *   Return the times used.
+   * {@inheritdoc}
    */
-  public function apiKeyUsageLast($key_id, string $timeCondition = '-1 hour'): mixed
+  public function apiKeyUsageLast(int $keyId, string $timeCondition = '-1 hour'): mixed
   {
     return $this->database->select('api_sentinel_usage', 'asu')
-      ->condition('asu.key_id', $key_id)
+      ->condition('asu.key_id', $keyId)
       ->condition('asu.used_at', strtotime($timeCondition), '>')
       ->countQuery()
       ->execute()

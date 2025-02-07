@@ -1,7 +1,7 @@
-api_sentinel.admin:
+api_sentinel.dashboard:
   path: '/admin/config/api-sentinel'
   defaults:
-    _title: 'API Sentinel'
+    _title: 'API Sentinel Dashboard'
     _controller: 'Drupal\api_sentinel\Controller\ApiSentinelDashboardController::dashboard'
   requirements:
     _permission: 'administer api keys'
@@ -14,7 +14,7 @@ api_sentinel.generate:
     _title: 'Generate API Key'
     _form: 'Drupal\api_sentinel\Form\ApiKeyGenerateForm'
   requirements:
-    _permission: 'administer api keys'
+    _permission: 'generate api keys'
   options:
     _admin_route: TRUE
 
@@ -32,7 +32,7 @@ api_sentinel.api_key_revoke_confirm:
     _title: 'Api Key Regenerate Confirm'
     _form: 'Drupal\api_sentinel\Form\ApiKeyRevokeConfirmForm'
   requirements:
-    _permission: 'administer api keys'
+    _permission: 'revoke api keys'
     uid: '\d+'
   options:
     _admin_route: TRUE
@@ -43,7 +43,7 @@ api_sentinel.api_key_regenerate_confirm:
     _title: 'Api Key Regenerate Confirm'
     _form: 'Drupal\api_sentinel\Form\ApiKeyRegenerateConfirmForm'
   requirements:
-    _permission: 'administer api keys'
+    _permission: 'regenerate api keys'
     uid: '\d+'
   options:
     _admin_route: TRUE
@@ -54,19 +54,19 @@ api_sentinel.usage_dialog:
     _controller: 'Drupal\api_sentinel\Controller\ApiSentinelUsageController::usageDialog'
     _title: 'API Key Usage'
   requirements:
-    _permission: 'administer api keys'
+    _permission: 'usage api keys'
     key_id: '\d+'
   options:
     _admin_route: TRUE
 
-api_sentinel.show_api_key:
-  path: '/admin/config/api-sentinel/key/{key_id}'
+api_sentinel.view_api_key:
+  path: '/admin/config/api-sentinel/key/{uid}'
   defaults:
-    _controller: 'Drupal\api_sentinel\Controller\ApiKeyDialogController::showApiKey'
+    _controller: 'Drupal\api_sentinel\Controller\ApiKeyViewController::showApiKey'
     _title: 'Show API Key'
   requirements:
-    _permission: 'administer api keys'
-    key_id: '\d+'
+    _permission: 'view api keys'
+    uid: '\d+'
   options:
     _admin_route: TRUE
 
@@ -76,7 +76,17 @@ api_sentinel.toggle_block:
     _controller: 'Drupal\api_sentinel\Controller\ApiKeyBlockController::toggleBlockStatus'
     _title: 'Toggle API Key Block Status'
   requirements:
-    _permission: 'administer api keys'
+    _permission: 'block api keys'
     key_id: '\d+'
+  options:
+    _admin_route: TRUE
+
+api_sentinel.overview:
+  path: '/admin/config/api-sentinel/overview'
+  defaults:
+    _title: 'API Sentinel Overview'
+    _controller: 'Drupal\api_sentinel\Controller\ApiKeyOverviewController::overview'
+  requirements:
+    _permission: 'view api keys'
   options:
     _admin_route: TRUE

@@ -70,6 +70,6 @@ class ApiKeyBlockController extends ControllerBase {
     $message = $newStatus ? $this->t('API key has been blocked.') : $this->t('API key has been unblocked.');
     $this->messenger->addStatus($message);
 
-    return new RedirectResponse(Url::fromRoute('api_sentinel.admin')->toString());
+    return new RedirectResponse(Url::fromRoute('api_sentinel.dashboard')->toString());
   }
 }

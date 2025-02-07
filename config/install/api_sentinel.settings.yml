@@ -3,4 +3,6 @@ failure_limit: 0
 failure_limit_time: 'hour'
 max_rate_limit: 100
 max_rate_limit_time: 'hour'
-use_encryption: false
+auto_generate_enabled: false
+auto_generate_duration: 0
+auto_generate_duration_unit: 'years'

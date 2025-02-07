@@ -2,6 +2,7 @@
 
 namespace Drupal\api_sentinel\EventSubscriber;
 
+use Drupal\Core\Config\ConfigFactoryInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
@@ -20,13 +21,23 @@ class ApiSentinelEventSubscriber implements EventSubscriberInterface {
   protected LoggerInterface $logger;
 
   /**
+   * The configuration factory.
+   *
+   * @var \Drupal\Core\Config\ConfigFactoryInterface
+   */
+  protected ConfigFactoryInterface $configFactory;
+
+  /**
    * Constructs an API Sentinel event subscriber.
    *
    * @param LoggerInterface $logger
    *   The logger service.
+   * @param \Drupal\Core\Config\ConfigFactoryInterface $configFactory
+   *    The configuration factory.
    */
-  public function __construct(LoggerInterface $logger) {
+  public function __construct(LoggerInterface $logger, ConfigFactoryInterface $configFactory) {
     $this->logger = $logger;
+    $this->configFactory = $configFactory;
   }
 
   /**
@@ -37,12 +48,15 @@ class ApiSentinelEventSubscriber implements EventSubscriberInterface {
    */
   public function onRequest(RequestEvent $event): void
   {
+    $config = $this->configFactory->get('api_sentinel.settings');
     $request = $event->getRequest();
-    $path = $request->getPathInfo();
-    $ip = $request->getClientIp();
-
-    // Log the API request.
-    $this->logger->info("API request received: $path from IP $ip.");
+    $customHeader = $config->get('custom_auth_header');
+    if ($request->headers->has($customHeader)) {
+      $path = $request->getPathInfo();
+      $ip = $request->getClientIp();
+      // Log the API request.
+      $this->logger->info("API request received: $path from IP $ip.");
+    }
   }
 
   /**

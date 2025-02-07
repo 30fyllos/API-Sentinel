@@ -85,7 +85,7 @@ final class ApiKeyRevokeConfirmForm extends ConfirmFormBase {
    * {@inheritdoc}
    */
   public function getCancelUrl(): Url {
-    return new Url('api_sentinel.admin');
+    return new Url('api_sentinel.dashboard');
   }
 
   /**
@@ -102,7 +102,7 @@ final class ApiKeyRevokeConfirmForm extends ConfirmFormBase {
       $this->messenger()->addError($this->t('Invalid user selection.'));
     }
 
-    $form_state->setRedirectUrl(new Url('api_sentinel.admin'));
+    $form_state->setRedirectUrl(new Url('api_sentinel.dashboard'));
   }
 
 }

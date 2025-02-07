@@ -2,10 +2,6 @@
 
 namespace Drupal\api_sentinel\Enum;
 
-use Drupal\Core\Cache\CacheBackendInterface;
-use Drupal\Core\Cache\CacheFactory;
-use Drupal::service;
-
 /**
  * Enum representing valid timeframes for API key usage queries.
  */
@@ -19,71 +15,87 @@ enum Timeframe: string {
   case THIRTY_DAYS = '30d';
 
   /**
-   * Get the cache service.
-   */
-  private static function cache(): CacheBackendInterface {
-    return service('cache.default');
-  }
-
-  /**
-   * Get the corresponding timestamp for the timeframe, using cache.
+   * Get the corresponding timestamp for the timeframe.
+   *
+   * This method computes the timestamp relative to the current time.
+   *
+   * @return int
+   *   The computed timestamp.
    */
   public function toTimestamp(): int {
-    $cacheKey = "timeframe_timestamp:{$this->value}";
-    $cache = self::cache()->get($cacheKey);
-
-    if ($cache) {
-      return $cache->data;
-    }
-
-    $timestamp = match ($this) {
-      self::ONE_HOUR => strtotime('-1 hour'),
-      self::TWO_HOURS => strtotime('-2 hours'),
+    return match ($this) {
+      self::ONE_HOUR    => strtotime('-1 hour'),
+      self::TWO_HOURS   => strtotime('-2 hours'),
       self::THREE_HOURS => strtotime('-3 hours'),
-      self::SIX_HOURS => strtotime('-6 hours'),
-      self::ONE_DAY => strtotime('-1 day'),
-      self::SEVEN_DAYS => strtotime('-7 days'),
+      self::SIX_HOURS   => strtotime('-6 hours'),
+      self::ONE_DAY     => strtotime('-1 day'),
+      self::SEVEN_DAYS  => strtotime('-7 days'),
       self::THIRTY_DAYS => strtotime('-30 days'),
     };
-
-    // Cache the timestamp for future use
-    self::cache()->set($cacheKey, $timestamp, CacheBackendInterface::CACHE_PERMANENT);
-
-    return $timestamp;
   }
 
   /**
-   * Get the full name of the timeframe.
+   * Get the full, human-readable name of the timeframe.
+   *
+   * @return string
+   *   The name of the timeframe.
    */
   public function toName(): string {
     return match ($this) {
-      self::ONE_HOUR => '1 hour',
-      self::TWO_HOURS => '2 hours',
+      self::ONE_HOUR    => '1 hour',
+      self::TWO_HOURS   => '2 hours',
       self::THREE_HOURS => '3 hours',
-      self::SIX_HOURS => '6 hours',
-      self::ONE_DAY => '1 day',
-      self::SEVEN_DAYS => '7 days',
+      self::SIX_HOURS   => '6 hours',
+      self::ONE_DAY     => '1 day',
+      self::SEVEN_DAYS  => '7 days',
       self::THIRTY_DAYS => '30 days',
     };
   }
 
   /**
    * Convert a string value into a Timeframe enum.
+   *
+   * @param string $value
+   *   The string representation (e.g. "1h").
+   *
+   * @return static|null
+   *   The corresponding Timeframe enum, or NULL if invalid.
    */
   public static function fromString(string $value): ?self {
     return self::tryFrom($value);
   }
 
   /**
-   * Get both timestamp & full name from a timeframe string.
+   * Get both the timestamp and the full name from a timeframe string.
+   *
+   * @param string $value
+   *   The string representation of the timeframe.
+   *
+   * @return array|null
+   *   An associative array with 'timeframe', 'name', and 'timestamp'
+   *   keys, or NULL if the provided value is invalid.
    */
   public static function getDetails(string $value): ?array {
     $timeframe = self::fromString($value);
-
     return $timeframe ? [
-      'timeframe' => $timeframe->value,  // "1h"
-      'name' => $timeframe->toName(),    // "1 hour"
-      'timestamp' => $timeframe->toTimestamp(),  // Cached timestamp
+      'timeframe' => $timeframe->value,       // e.g. "1h"
+      'name'      => $timeframe->toName(),      // e.g. "1 hour"
+      'timestamp' => $timeframe->toTimestamp(), // computed dynamically
     ] : null;
+  }
+
+  /**
+   * Get the options array for a select field.
+   *
+   * @return array
+   *   An associative array where the key is the enum value (e.g. "1h")
+   *   and the value is the human-readable name (e.g. "1 hour").
+   */
+  public static function options(): array {
+    $options = [];
+    foreach (self::cases() as $timeframe) {
+      $options[$timeframe->value] = $timeframe->toName();
+    }
+    return $options;
   }
 }
