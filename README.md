@@ -30,7 +30,7 @@ It enables site administrators to secure API access using robust authentication 
 
 ```sh
 composer config repositories.api-sentinel vcs https://github.com/30fyllos/API-Sentinel.git
-composer require 30fyllos/api-sentinel:dev-main
+composer require gt/api-sentinel:dev-main
 drush en api_sentinel -y
 drush cr
 ```
