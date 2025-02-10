@@ -75,15 +75,12 @@ class ApiKeyOverviewController extends ControllerBase {
     $user = User::load($current_user->id());
 
     $build = [];
-    $build['header'] = [
-      '#markup' => $this->t('API Key Overview for @user', ['@user' => $user->getDisplayName()]),
-    ];
 
     // Check if the user already has an API key.
-    $has_api_key = $this->apiKeyManager->hasApiKey($user);
-    if ($has_api_key) {
+    $apiKeyId = $this->apiKeyManager->hasApiKey($user);
+    if ($apiKeyId) {
       $build['key_info'] = [
-        '#markup' => $this->t('You have an API key on file.'),
+        '#markup' => $this->t('You have an API key.'),
       ];
     }
     else {
@@ -92,49 +89,72 @@ class ApiKeyOverviewController extends ControllerBase {
       ];
     }
 
+    $dialogAttributes = [
+      'attributes' => [
+        'class' => [
+          'use-ajax'
+        ],
+        'data-dialog-type' => 'modal',
+        'data-dialog-options' => json_encode([
+          'width' => 600
+        ])
+      ]
+    ];
+
     // Build action links based on the user's permissions.
     $actions = [];
-
-    if ($current_user->hasPermission('generate api key')) {
+    if ($user->hasPermission('view api keys') && $apiKeyId) {
       $actions[] = [
-        '#type' => 'link',
-        '#title' => $this->t('Generate API Key'),
-        '#url' => Url::fromRoute('api_sentinel.generate'),
+        'title' => $this->t('View API Key'),
+        'url' => Url::fromRoute('api_sentinel.view_api_key', ['uid' => $user->id()], $dialogAttributes),
       ];
     }
-    if ($current_user->hasPermission('revoke api key') && $has_api_key) {
+    if ($current_user->hasPermission('generate api keys') && !$apiKeyId) {
       $actions[] = [
-        '#type' => 'link',
-        '#title' => $this->t('Revoke API Key'),
-        '#url' => Url::fromRoute('api_sentinel.api_key_revoke_confirm'),
+        'title' => $this->t('Generate API Key'),
+        'url' => Url::fromRoute('api_sentinel.generate', ['uid' => $user->id()], $dialogAttributes),
       ];
     }
-    if ($current_user->hasPermission('regenerate api key') && $has_api_key) {
-      $actions[] = [
-        '#type' => 'link',
-        '#title' => $this->t('Regenerate API Key'),
-        '#url' => Url::fromRoute('api_sentinel.api_key_regenerate_confirm'),
-      ];
-    }
-    if ($current_user->hasPermission('block api key') && $has_api_key) {
-      $actions[] = [
-        '#type' => 'link',
-        '#title' => $this->t('Block/Unblock API Key'),
-        '#url' => Url::fromRoute('api_sentinel.toggle_block'),
-      ];
-    }
-    if ($current_user->hasPermission('view api key usage') && $has_api_key) {
-      $actions[] = [
-        '#type' => 'link',
-        '#title' => $this->t('View API Key Usage'),
-        '#url' => Url::fromRoute('api_sentinel.usage_dialog'),
-      ];
+    if ($apiKeyId) {
+      if ($current_user->hasPermission('revoke api keys')) {
+        $actions[] = [
+          'title' => $this->t('Revoke API Key'),
+          'url' => Url::fromRoute('api_sentinel.api_key_revoke_confirm', ['uid' => $user->id()], $dialogAttributes),
+        ];
+      }
+      if ($current_user->hasPermission('regenerate api keys')) {
+        $actions[] = [
+          'title' => $this->t('Regenerate API Key'),
+          'url' => Url::fromRoute('api_sentinel.api_key_regenerate_confirm', ['uid' => $user->id()], $dialogAttributes),
+        ];
+      }
+      if ($current_user->hasPermission('block api keys')) {
+        $status = $this->apiKeyManager->getApiKeyStatus($apiKeyId) ? $this->t('Unblock') : $this->t('Block');
+        $actions[] = [
+          'title' => $this->t('@status API Key', [
+            '@status' => $status
+          ]),
+          'url' => Url::fromRoute('api_sentinel.toggle_block', ['key_id' => $apiKeyId], $dialogAttributes),
+        ];
+      }
+      if ($current_user->hasPermission('usage api keys')) {
+        $actions[] = [
+          'title' => $this->t('View API Key Usage'),
+          'url' => Url::fromRoute('api_sentinel.usage_dialog', ['key_id' => $apiKeyId], $dialogAttributes),
+        ];
+      }
     }
 
     if (!empty($actions)) {
       $build['actions'] = [
-        '#theme' => 'item_list',
-        '#items' => $actions,
+        '#type' => 'dropbutton',
+        '#dropbutton_type' => 'small',
+        '#links' => $actions,
+        '#attached' => [
+          'library' => [
+            'core/drupal.dialog.ajax'
+          ],
+        ],
       ];
     }
 

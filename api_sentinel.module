@@ -20,6 +20,9 @@ function api_sentinel_user_login($account): void
   $event_dispatcher->dispatch($event, UserLoginEvent::LOGIN);
 }
 
+/**
+ * Implements hook_entity_insert().
+ */
 function api_sentinel_entity_insert(EntityInterface $entity) {
   // Get the event dispatcher service.
   $event_dispatcher = \Drupal::service('event_dispatcher');
@@ -31,6 +34,9 @@ function api_sentinel_entity_insert(EntityInterface $entity) {
   $event_dispatcher->dispatch($event, EntityCreateEvent::INSERT);
 }
 
+/**
+ * Implements hook_cache_flush().
+ */
 function api_sentinel_cache_flush() {
   // Get the event dispatcher service.
   $event_dispatcher = \Drupal::service('event_dispatcher');
@@ -40,4 +46,16 @@ function api_sentinel_cache_flush() {
 
   // Dispatch the custom event.
   $event_dispatcher->dispatch($event, CacheEvent::FLUSH);
+}
+
+/**
+ * Implements hook_mail().
+ */
+function api_sentinel_mail($key, &$message, $params) {
+  $data['user'] = $params['account'];
+  $options['langcode'] = $message['langcode'];
+  user_mail_tokens($variables, $data, $options);
+  $message['subject'] = $params['subject'];
+  $message['body'][] = $params['message'];
+  // Required from symfony_mailer https://www.drupal.org/project/easy_email/issues/3392148.
 }

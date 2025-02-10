@@ -96,13 +96,48 @@ interface ApiKeyManagerInterface {
   /**
    * Checks if a user has an API key.
    *
-   * @param \Drupal\Core\Session\AccountInterface|string $account
+   * @param AccountInterface|string $account
    *   The user account or user ID.
    *
-   * @return bool
-   *   TRUE if an API key exists, FALSE otherwise.
+   * @return int|null
+   *   The api key ID or null.
    */
-  public function hasApiKey(AccountInterface|string $account): bool;
+  public function hasApiKey(AccountInterface|string $account): int|null;
+
+  /**
+   * Checks if a user matches the API key.
+   *
+   * @param AccountInterface|string $account
+   *   The user account or user ID.
+   * @param $keyId
+   *   The key ID.
+   *
+   * @return int|null
+   *   The user ID or null.
+   */
+  public function matchApiKey(AccountInterface|string $account, $keyId): int|null;
+
+  /**
+   * Fetches the current block status of an API key.
+   *
+   * @param int $key_id
+   *   The API key ID.
+   *
+   * @return int|null
+   *   Returns 1 if blocked, 0 if not blocked, or NULL if the key does not exist.
+   */
+  public function getApiKeyStatus(int $key_id): ?int;
+
+  /**
+   * Toggles the block status of an API key.
+   *
+   * @param int $key_id
+   *   The API key ID.
+   *
+   * @return bool
+   *   TRUE if the key was successfully updated, FALSE if not found.
+   */
+  public function toggleApiKeyStatus(int $key_id): bool;
 
   /**
    * Gets the API key expiration timestamp for a user.

@@ -17,9 +17,9 @@ class ApiKeyGenerateAllForm extends FormBase {
   /**
    * The API Key Manager service.
    *
-   * @var \Drupal\api_sentinel\Service\ApiKeyManager
+   * @var ApiKeyManager
    */
-  protected $apiKeyManager;
+  protected ApiKeyManager $apiKeyManager;
 
   /**
    * Constructs the form.
@@ -32,7 +32,9 @@ class ApiKeyGenerateAllForm extends FormBase {
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container) {
-    return new static($container->get('api_sentinel.api_key_manager'));
+    return new static(
+      $container->get('api_sentinel.api_key_manager')
+    );
   }
 
   /**

@@ -195,7 +195,7 @@ class ApiKeyManager implements ApiKeyManagerInterface {
     }
 
     // Merge (insert or update) the API key record.
-    $entry = $this->database->merge('api_sentinel_keys')
+    $this->database->merge('api_sentinel_keys')
       ->key('uid', $account->id())
       ->fields([
         'api_key' => hash('sha256', $apiKey),
@@ -206,8 +206,7 @@ class ApiKeyManager implements ApiKeyManagerInterface {
       ->execute();
 
     $this->logKeyChange($account->id(), 'Generated a new API key.');
-    $link = Url::fromRoute('api_sentinel.view_api_key', ['uid' => $account->id()], ['absolute' => TRUE])->toString();
-    $this->notificationService->notifyNewKey($account, $apiKey, $link);
+    $this->notificationService->notifyNewKey($account);
   }
 
   /**
@@ -257,17 +256,72 @@ class ApiKeyManager implements ApiKeyManagerInterface {
   /**
    * {@inheritdoc}
    */
-  public function hasApiKey(AccountInterface|string $account): bool {
+  public function hasApiKey(AccountInterface|string $account): int|null {
     if ($account instanceof AccountInterface) {
       $account = $account->id();
     }
-    $query = $this->database->select('api_sentinel_keys', 'ask')
-      ->fields('ask', ['uid'])
+    $keyId = $this->database->select('api_sentinel_keys', 'ask')
+      ->fields('ask', ['id'])
       ->condition('ask.uid', $account)
       ->execute()
       ->fetchField();
-    return !empty($query);
+
+    return $keyId ? (int) $keyId : NULL;
   }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function matchApiKey(AccountInterface|string $account, $keyId): ?int
+  {
+    if ($account instanceof AccountInterface) {
+      $account = $account->id();
+    }
+    $uid = $this->database->select('api_sentinel_keys', 'ask')
+      ->fields('ask', ['uid'])
+      ->condition('ask.uid', $account)
+      ->condition('ask.id', $keyId)
+      ->execute()
+      ->fetchField();
+
+    return $uid ? (int) $uid : NULL;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getApiKeyStatus(int $key_id): ?int {
+    return $this->database->select('api_sentinel_keys', 'ask')
+      ->fields('ask', ['blocked'])
+      ->condition('id', $key_id)
+      ->execute()
+      ->fetchField();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function toggleApiKeyStatus(int $key_id): bool {
+    $current_status = $this->getApiKeyStatus($key_id);
+
+    if ($current_status === NULL) {
+      return FALSE;
+    }
+
+    $new_status = $current_status ? 0 : 1;
+
+    $this->database->update('api_sentinel_keys')
+      ->fields(['blocked' => $new_status])
+      ->condition('id', $key_id)
+      ->execute();
+
+    // Log the change.
+    $message = $new_status ? 'API key has been blocked.' : 'API key has been unblocked.';
+    $this->logger->notice($message, ['key_id' => $key_id, 'changed_by' => $this->currentUser->id()]);
+
+    return TRUE;
+  }
+
 
   /**
    * {@inheritdoc}

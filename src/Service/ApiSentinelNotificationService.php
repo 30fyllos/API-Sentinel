@@ -9,6 +9,7 @@ use Drupal\Core\Queue\QueueInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Logger\LoggerChannelInterface;
 use Drupal\Core\Session\AccountInterface;
+use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\Core\Url;
 
 /**
@@ -18,6 +19,8 @@ use Drupal\Core\Url;
  * and offers methods to notify users via email and on-site messenger.
  */
 class ApiSentinelNotificationService implements ApiSentinelNotificationServiceInterface {
+
+  use StringTranslationTrait;
 
   /**
    * The mail manager.
@@ -89,15 +92,19 @@ class ApiSentinelNotificationService implements ApiSentinelNotificationServiceIn
    * {@inheritdoc}
    */
   public function queueNotification(string $type, AccountInterface $account, array $data = []): void {
+    if (!$account->getEmail()) {
+      return;
+    }
     $notification = [
       'type' => $type,
-      'uid' => $account->id(),
+      'account' => $account,
       'email' => $account->getEmail(),
       'langcode' => $account->getPreferredLangcode(),
       'data' => $data,
       'timestamp' => time(),
     ];
     $this->notificationQueue->createItem($notification);
+    $this->processNotification($notification);
     $this->logger->info('Notification queued for user @uid (type: @type)', [
       '@uid' => $account->id(),
       '@type' => $type,
@@ -107,10 +114,9 @@ class ApiSentinelNotificationService implements ApiSentinelNotificationServiceIn
   /**
    * {@inheritdoc}
    */
-  public function notifyNewKey(AccountInterface $account, string $apiKey, ?string $link = NULL): void {
+  public function notifyNewKey(AccountInterface $account): void {
     $data = [
-      'api_key' => $apiKey,
-      'link' => $link,
+      'link' => Url::fromRoute('api_sentinel.view_api_key', ['uid' => $account->id()], ['absolute' => TRUE])->toString(),
     ];
     $this->queueNotification('new_key', $account, $data);
   }
@@ -148,7 +154,7 @@ class ApiSentinelNotificationService implements ApiSentinelNotificationServiceIn
    */
   public function processNotification(array $notification): void {
     $type = $notification['type'];
-    $uid = $notification['uid'];
+    $account = $notification['account'];
     $email = $notification['email'];
     $langcode = $notification['langcode'];
     $data = $notification['data'];
@@ -157,7 +163,7 @@ class ApiSentinelNotificationService implements ApiSentinelNotificationServiceIn
     switch ($type) {
       case 'new_key':
         $subject = $this->t('Your new API key');
-        $message = $this->t('A new API key has been generated for your account. Your API key is: @api_key', ['@api_key' => $data['api_key']]);
+        $message = $this->t('A new API key has been generated for your account.');
         if (!empty($data['link'])) {
           $message .= "\n" . $this->t('Click this secure link to view your API key: @link', ['@link' => $data['link']]);
         }
@@ -194,38 +200,23 @@ class ApiSentinelNotificationService implements ApiSentinelNotificationServiceIn
     $params = [
       'subject' => $subject,
       'message' => $message,
+      'account' => $account,
     ];
+
     $result = $this->mailManager->mail($module, $type, $email, $langcode, $params, NULL, TRUE);
+
     if ($result['result'] !== TRUE) {
       $this->logger->error('Failed to send notification email to user @uid (type: @type)', [
-        '@uid' => $uid,
+        '@uid' => $account->id(),
         '@type' => $type,
       ]);
     }
     else {
       $this->logger->info('Notification email sent to user @uid (type: @type)', [
-        '@uid' => $uid,
+        '@uid' => $account->id(),
         '@type' => $type,
       ]);
     }
-
-    // Optionally, also display an on-site (messenger) notification.
-    $this->messenger->addStatus($message);
-  }
-
-  /**
-   * Helper to translate strings.
-   *
-   * @param string $string
-   *   The string to translate.
-   * @param array $args
-   *   Replacement arguments.
-   *
-   * @return string
-   *   The translated string.
-   */
-  protected function t(string $string, array $args = []): string {
-    return \Drupal::translation()->translate($string, $args);
   }
 
 }

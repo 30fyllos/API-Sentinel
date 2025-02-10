@@ -32,12 +32,8 @@ interface ApiSentinelNotificationServiceInterface {
    *
    * @param \Drupal\Core\Session\AccountInterface $account
    *   The user account.
-   * @param string $apiKey
-   *   The generated API key.
-   * @param string|null $link
-   *   (Optional) A one-time secure link for the user to view the API key.
    */
-  public function notifyNewKey(AccountInterface $account, string $apiKey, ?string $link = NULL): void;
+  public function notifyNewKey(AccountInterface $account): void;
 
   /**
    * Notifies a user when their API key has been blocked.
