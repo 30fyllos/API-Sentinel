@@ -7,26 +7,26 @@
 ## 🚀 Overview
 
 **API Sentinel** is a **Drupal module** that provides **API key-based authentication** for RESTful and JSON:API endpoints.
-It allows site administrators to **secure API access** with custom authentication rules.
+It enables site administrators to secure API access using robust authentication mechanisms, detailed logging, and customizable settings.
 
 ### 🔑 Features:
 
-- API Key Authentication for REST API & JSON:API
-- Key Generation, Revocation & Regeneration
-- Whitelist & Blacklist IP Addresses
-- Restrict API access to specific paths (`/api/*`)
-- Custom Authentication Header Support
-- Bulk API Key Generation by Role
-- Request Logging & Security Monitoring
+- **API Key Authentication:** Secure your REST API & JSON:API endpoints with unique API keys.
+- **Key Management:** Generate, revoke, and regenerate API keys on a per-user basis.
+- **Bulk Generation:** Optionally generate API keys in bulk for users by specific roles.
+- **IP Whitelisting & Blacklisting:** Control API access based on trusted or blocked IP addresses.
+- **Path Restriction:** Limit API access to defined paths (e.g., /api/*).
+- **Custom Headers:** Configure the authentication header (default: X-API-KEY; can be changed to, for example, X-Custom-Auth).
+- **Request Logging & Monitoring:** Log API key usage and monitor security events.
+- **Event Integration:** Leverages Drupal hooks and Symfony events (on user login, entity creation, cache flush, etc.) for extended customization.
 
 ---
 
 ## 📦 Installation
 
 ### **1. Install via Composer**
-- Add the module repository to Composer.
-- Require the module via Composer.
-- Enable the module in Drupal.
+
+#### Add the module repository to Composer, require the module, and then enable it:
 
 ```sh
 composer config repositories.api-sentinel vcs https://github.com/30fyllos/API-Sentinel.git
@@ -43,32 +43,32 @@ drush cr
 ## ⚙️ Configuration
 
 ### **API Key Management**
-- Go to **Admin → Configuration → API Sentinel** (`/admin/config/api-sentinel`).
+- Go to **Admin → Configuration → API Sentinel** (`/api-sentinel/dashboard`).
+- Set permissions to user to manage their own API key (`/api-sentinel/overview`).
 - Generate, revoke, or regenerate API keys for users.
 - Bulk generate API keys for specific user roles.
 
 ### **Restrict API Access by Paths**
-- Navigate to **Admin → Configuration → API Sentinel Settings** (`/admin/config/api-sentinel/settings`).
 - Define allowed API paths:
   ```sh
   /api/*
-  /jsonapi/node/article/*
+  /node/article/*
   ```
 - Save configuration.
 
-### **Whitelist & Blacklist IPs**
-- Block or allow specific IP addresses.
+### **IP Whitelisting & Blacklisting**
+- Manage allowed or blocked IP addresses to further restrict API access.
 
 ### **Set Custom Authentication Header**
-- Default: `X-API-KEY`
-- Can be changed to `X-Custom-Auth` or another custom header.
+- By default, API Sentinel uses the header: `X-API-KEY`
+- This can be customized via settings (e.g., to `X-Custom-Auth`).
 
 ---
 
-## 🔍 Using API Keys in Requests
+## 🔍 Making Requests with API Keys
 
-### **1. GET Request with API Key**
-- Send a request using the API key in the request header.
+### **1. GET Request Example**
+- Include the API key in your request header:
   ```sh
   curl -X GET "http://your-drupal-site/api/secure-data" \
      -H "X-API-KEY: YOUR_GENERATED_API_KEY"
@@ -88,6 +88,7 @@ drush cr
 - Disable and remove API Sentinel from Drupal.
 - Clear cache to remove stored configurations.
   ```sh
+  drush pm-uninstall api_sentinel -y
   ```
 
 ---

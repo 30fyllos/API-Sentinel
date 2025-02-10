@@ -116,6 +116,7 @@ function api_sentinel_uninstall(): void
 {
   $connection = \Drupal::database();
 
-  // Drop the table.
+  // Drop the tables.
   $connection->schema()->dropTable('api_sentinel_keys');
+  $connection->schema()->dropTable('api_sentinel_usage');
 }
