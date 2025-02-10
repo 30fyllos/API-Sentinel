@@ -2,7 +2,7 @@
 
 namespace Drupal\api_sentinel\Controller;
 
-use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\api_sentinel\Service\ApiKeyManager;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Database\Connection;
 use Drupal\Core\DependencyInjection\ContainerInjectionInterface;
@@ -13,7 +13,14 @@ use Drupal\Core\Session\AccountProxyInterface;
 /**
  * Provides an AJAX dialog to show full API keys.
  */
-class ApiKeyDialogController extends ControllerBase implements ContainerInjectionInterface {
+class ApiKeyViewController extends ControllerBase implements ContainerInjectionInterface {
+
+  /**
+   * The API Key Manager service.
+   *
+   * @var ApiKeyManager
+   */
+  protected ApiKeyManager $apiKeyManager;
 
   /**
    * Database connection.
@@ -30,19 +37,12 @@ class ApiKeyDialogController extends ControllerBase implements ContainerInjectio
   protected $currentUser;
 
   /**
-   * The configuration factory.
-   *
-   * @var ConfigFactoryInterface
+   * Constructs a new ApiKeyViewController.
    */
-  protected $configFactory;
-
-  /**
-   * Constructs a new ApiKeyDialogController.
-   */
-  public function __construct(Connection $database, AccountProxyInterface $current_user, ConfigFactoryInterface $configFactory) {
+  public function __construct(ApiKeyManager $apiKeyManager, Connection $database, AccountProxyInterface $current_user) {
+    $this->apiKeyManager = $apiKeyManager;
     $this->database = $database;
     $this->currentUser = $current_user;
-    $this->configFactory = $configFactory;
   }
 
   /**
@@ -50,22 +50,19 @@ class ApiKeyDialogController extends ControllerBase implements ContainerInjectio
    */
   public static function create(ContainerInterface $container) {
     return new static(
+      $container->get('api_sentinel.api_key_manager'),
       $container->get('database'),
       $container->get('current_user'),
-      $container->get('config.factory')
     );
   }
 
   /**
    * Returns the API key in a secure AJAX dialog.
    */
-  public function showApiKey($key_id) {
-    $config = $this->configFactory->get('api_sentinel.settings');
-    $useEncryption = $config->get('use_encryption');
-
+  public function showApiKey($uid) {
     $query = $this->database->select('api_sentinel_keys', 'ask')
-      ->fields('ask', ['api_key'])
-      ->condition('id', $key_id)
+      ->fields('ask', ['data', 'expires'])
+      ->condition('uid', $uid)
       ->execute()
       ->fetchAssoc();
 
@@ -73,7 +70,8 @@ class ApiKeyDialogController extends ControllerBase implements ContainerInjectio
       return new JsonResponse(['error' => $this->t('API key not found.')], 404);
     }
 
-    $msg = $useEncryption ? '<strong>' . $this->t('Full API Key:') . '</strong><br><code>' . \Drupal::service('api_sentinel.api_key_manager')->decryptValue($query['api_key']) . '</code>' : '<strong>' . $this->t('Api key is not available') . '</strong><br>Change to encrypted API keys to have access to the keys at anytime.';
+    $expires = $query['expires'] ? date('d-m-Y H:i:s', $query['expires']) : 'Never';
+    $msg = '<strong>' . $this->t('The API Key is:') . '</strong><br><code>' . $this->apiKeyManager->decryptValue($query['data']) . '</code><br><small><strong>' . $this->t('Expires on:') . '</strong> <time>' . $expires . '</time></small>';
 
     return [
       '#type' => 'markup',

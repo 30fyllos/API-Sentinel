@@ -1,6 +1,6 @@
-api_sentinel.admin:
+api_sentinel.dashboard:
   title: 'API Sentinel'
   description: 'Manage API keys and view API usage'
   parent: system.admin_config
-  route_name: api_sentinel.admin
+  route_name: api_sentinel.dashboard
   weight: 5

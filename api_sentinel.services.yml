@@ -5,15 +5,19 @@ services:
 
   api_sentinel.auth:
     class: 'Drupal\api_sentinel\Authentication\ApiSentinelAuthProvider'
-    arguments: ['@database', '@cache.static', '@logger.channel.api_sentinel']
+    arguments: ['@database', '@cache.default', '@logger.channel.api_sentinel', '@config.factory', '@path.current', '@api_sentinel.api_key_manager']
     tags:
       - { name: authentication_provider, provider_id: 'api_sentinel_auth', priority: 10 }
 
   api_sentinel.api_key_manager:
     class: 'Drupal\api_sentinel\Service\ApiKeyManager'
-    arguments: ['@database', '@config.factory', '@logger.channel.api_sentinel']
+    arguments: ['@database', '@config.factory', '@logger.channel.api_sentinel', '@cache.default', '@current_user', '@tempstore.private', '@api_sentinel.notification']
 
-#  api_sentinel.rest_resource:
+  api_sentinel.notification:
+    class: Drupal\api_sentinel\Service\ApiSentinelNotificationService
+    arguments: [ '@plugin.manager.mail', '@messenger', '@queue', '@config.factory', '@logger.channel.api_sentinel' ]
+
+  #  api_sentinel.rest_resource:
 #    class: 'Drupal\api_sentinel\Plugin\rest\resource\ApiSentinelResource'
 #    arguments: ['@logger.factory', '@current_user', '@api_sentinel.auth']
 #    tags:
@@ -21,9 +25,21 @@ services:
 
   api_sentinel.event_subscriber:
     class: 'Drupal\api_sentinel\EventSubscriber\ApiSentinelEventSubscriber'
-    arguments: ['@logger.channel.api_sentinel']
+    arguments: ['@logger.channel.api_sentinel', '@config.factory']
     tags:
       - { name: event_subscriber }
+
+  api_sentinel.user_auto_generate_subscriber:
+    class: Drupal\api_sentinel\EventSubscriber\UserAutoGenerateSubscriber
+    arguments: [ '@api_sentinel.api_key_manager', '@config.factory', '@logger.channel.api_sentinel' ]
+    tags:
+      - { name: event_subscriber }
+
+  api_sentinel.encryption_key_change_subscriber:
+    class: 'Drupal\api_sentinel\EventSubscriber\EncryptionKeyChangeSubscriber'
+    arguments: [ '@config.factory', '@state', '@logger.channel.api_sentinel', '@api_sentinel.api_key_manager' ]
+    tags:
+      - { name: 'event_subscriber' }
 
   api_sentinel.cleanup_cron:
     class: 'Drupal\api_sentinel\Cron\ApiKeyCleanupCron'

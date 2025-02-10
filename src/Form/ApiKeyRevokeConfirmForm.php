@@ -8,6 +8,7 @@ use Drupal\api_sentinel\Service\ApiKeyManager;
 use Drupal\Core\Database\Connection;
 use Drupal\Core\Form\ConfirmFormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Session\AccountProxyInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\Core\Url;
 use Drupal\user\Entity\User;
@@ -33,6 +34,13 @@ final class ApiKeyRevokeConfirmForm extends ConfirmFormBase {
   protected Connection $database;
 
   /**
+   * The current user.
+   *
+   * @var AccountProxyInterface
+   */
+  protected AccountProxyInterface $currentUser;
+
+  /**
    * ID of the user.
    *
    * @var int|string
@@ -42,9 +50,10 @@ final class ApiKeyRevokeConfirmForm extends ConfirmFormBase {
   /**
    * Constructs the form.
    */
-  public function __construct(ApiKeyManager $apiKeyManager, Connection $database) {
+  public function __construct(ApiKeyManager $apiKeyManager, Connection $database, AccountProxyInterface $currentUser) {
     $this->apiKeyManager = $apiKeyManager;
     $this->database = $database;
+    $this->currentUser = $currentUser;
   }
 
   /**
@@ -53,7 +62,8 @@ final class ApiKeyRevokeConfirmForm extends ConfirmFormBase {
   public static function create(ContainerInterface $container) {
     return new static(
       $container->get('api_sentinel.api_key_manager'),
-      $container->get('database')
+      $container->get('database'),
+      $container->get('current_user'),
     );
   }
 
@@ -78,6 +88,9 @@ final class ApiKeyRevokeConfirmForm extends ConfirmFormBase {
    */
   public function getQuestion(): TranslatableMarkup {
     $user = User::load($this->uid);
+    if ($this->currentUser->id() == $user->id()) {
+      return $this->t('Are you sure you want to revoke your API key?');
+    }
     return $this->t('Are you sure you want to revoke the API key for %user?', ['%user' => $user->getDisplayName()]);
   }
 
@@ -85,7 +98,9 @@ final class ApiKeyRevokeConfirmForm extends ConfirmFormBase {
    * {@inheritdoc}
    */
   public function getCancelUrl(): Url {
-    return new Url('api_sentinel.admin');
+    return $this->currentUser->hasPermission('administer api keys') ?
+      new Url('api_sentinel.dashboard') :
+      new Url('api_sentinel.overview');
   }
 
   /**
@@ -102,7 +117,11 @@ final class ApiKeyRevokeConfirmForm extends ConfirmFormBase {
       $this->messenger()->addError($this->t('Invalid user selection.'));
     }
 
-    $form_state->setRedirectUrl(new Url('api_sentinel.admin'));
+    if ($this->currentUser->hasPermission('administer api keys')) {
+      $form_state->setRedirect('api_sentinel.dashboard');
+    } else {
+      $form_state->setRedirect('api_sentinel.overview');
+    }
   }
 
 }

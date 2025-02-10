@@ -1,4 +1,34 @@
 administer api keys:
   title: 'Administer API keys'
-  description: 'Allows users to generate and revoke API keys.'
+  description: 'Allows users access API keys dashboard control.'
+  restrict access: true
+
+generate api keys:
+  title: 'Generate API keys'
+  description: 'Allows users to generate their API key.'
+  restrict access: true
+
+revoke api keys:
+  title: 'Revoke API keys'
+  description: 'Allows users to revoke their API key.'
+  restrict access: true
+
+regenerate api keys:
+  title: 'Re-generate API keys'
+  description: 'Allows users to re-generate their API key.'
+  restrict access: true
+
+usage api keys:
+  title: 'Usage API keys'
+  description: 'Allows users to view the usage their API key.'
+  restrict access: true
+
+view api keys:
+  title: 'View API keys'
+  description: "Allows users to view their API key."
+  restrict access: false
+
+block api keys:
+  title: 'Block/Unblock API keys'
+  description: "Allows users block/unblock their own API key."
   restrict access: true

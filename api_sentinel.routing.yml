@@ -1,82 +1,92 @@
-api_sentinel.admin:
-  path: '/admin/config/api-sentinel'
+api_sentinel.dashboard:
+  path: '/api-sentinel/dashboard'
   defaults:
-    _title: 'API Sentinel'
+    _title: 'API Sentinel Dashboard'
     _controller: 'Drupal\api_sentinel\Controller\ApiSentinelDashboardController::dashboard'
   requirements:
     _permission: 'administer api keys'
   options:
     _admin_route: TRUE
 
-api_sentinel.generate:
-  path: '/admin/config/api-sentinel/generate'
-  defaults:
-    _title: 'Generate API Key'
-    _form: 'Drupal\api_sentinel\Form\ApiKeyGenerateForm'
-  requirements:
-    _permission: 'administer api keys'
-  options:
-    _admin_route: TRUE
-
 api_sentinel.settings:
-  path: '/admin/config/api-sentinel/settings'
+  path: '/api-sentinel/settings'
   defaults:
     _form: 'Drupal\api_sentinel\Form\ApiSentinelSettingsForm'
     _title: 'API Sentinel Settings'
   requirements:
     _permission: 'administer api keys'
+  options:
+    _admin_route: TRUE
+
+api_sentinel.generate:
+  path: '/api-sentinel/generate/{uid}'
+  defaults:
+    _title: 'Generate API Key'
+    _form: 'Drupal\api_sentinel\Form\ApiKeyGenerateForm'
+    uid: NULL
+  requirements:
+    _permission: 'generate api keys'
+    uid: '\d*'
+  options:
+    parameters:
+      uid:
+        type: 'int'
+        required: false
+
+api_sentinel.view_api_key:
+  path: '/api-sentinel/key/{uid}'
+  defaults:
+    _controller: 'Drupal\api_sentinel\Controller\ApiKeyViewController::showApiKey'
+    _title: 'Show API Key'
+  requirements:
+    _permission: 'view api keys'
+    _custom_access: '\Drupal\api_sentinel\Access\UserAccessCheck::access'
+    uid: '\d+'
 
 api_sentinel.api_key_revoke_confirm:
-  path: '/api-sentinel/revoke-confirm/{uid}'
+  path: '/api-sentinel/revoke/{uid}'
   defaults:
     _title: 'Api Key Regenerate Confirm'
     _form: 'Drupal\api_sentinel\Form\ApiKeyRevokeConfirmForm'
   requirements:
-    _permission: 'administer api keys'
+    _permission: 'revoke api keys'
+    _custom_access: '\Drupal\api_sentinel\Access\UserAccessCheck::access'
     uid: '\d+'
-  options:
-    _admin_route: TRUE
 
 api_sentinel.api_key_regenerate_confirm:
-  path: '/api-sentinel/regenerate-confirm/{uid}'
+  path: '/api-sentinel/regenerate/{uid}'
   defaults:
     _title: 'Api Key Regenerate Confirm'
     _form: 'Drupal\api_sentinel\Form\ApiKeyRegenerateConfirmForm'
   requirements:
-    _permission: 'administer api keys'
+    _permission: 'regenerate api keys'
+    _custom_access: '\Drupal\api_sentinel\Access\UserAccessCheck::access'
     uid: '\d+'
-  options:
-    _admin_route: TRUE
 
 api_sentinel.usage_dialog:
-  path: '/admin/config/api-sentinel/usage/{key_id}'
+  path: '/api-sentinel/usage/{key_id}'
   defaults:
     _controller: 'Drupal\api_sentinel\Controller\ApiSentinelUsageController::usageDialog'
     _title: 'API Key Usage'
   requirements:
-    _permission: 'administer api keys'
+    _permission: 'usage api keys'
+    _custom_access: '\Drupal\api_sentinel\Access\UserAccessByKeyCheck::access'
     key_id: '\d+'
-  options:
-    _admin_route: TRUE
-
-api_sentinel.show_api_key:
-  path: '/admin/config/api-sentinel/key/{key_id}'
-  defaults:
-    _controller: 'Drupal\api_sentinel\Controller\ApiKeyDialogController::showApiKey'
-    _title: 'Show API Key'
-  requirements:
-    _permission: 'administer api keys'
-    key_id: '\d+'
-  options:
-    _admin_route: TRUE
 
 api_sentinel.toggle_block:
-  path: '/admin/config/api-sentinel/block/{key_id}'
+  path: '/api-sentinel/block/{key_id}'
   defaults:
-    _controller: 'Drupal\api_sentinel\Controller\ApiKeyBlockController::toggleBlockStatus'
+    _form: 'Drupal\api_sentinel\Form\ApiKeyBlockConfirmForm'
     _title: 'Toggle API Key Block Status'
   requirements:
-    _permission: 'administer api keys'
+    _permission: 'block api keys'
+    _custom_access: '\Drupal\api_sentinel\Access\UserAccessByKeyCheck::access'
     key_id: '\d+'
-  options:
-    _admin_route: TRUE
+
+api_sentinel.overview:
+  path: '/api-sentinel/overview'
+  defaults:
+    _title: 'API Sentinel Overview'
+    _controller: 'Drupal\api_sentinel\Controller\ApiKeyOverviewController::overview'
+  requirements:
+    _permission: 'view api keys'

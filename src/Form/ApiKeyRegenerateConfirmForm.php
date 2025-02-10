@@ -7,9 +7,11 @@ namespace Drupal\api_sentinel\Form;
 use Drupal\api_sentinel\Service\ApiKeyManager;
 use Drupal\Core\Form\ConfirmFormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Session\AccountProxyInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\Core\Url;
 use Drupal\user\Entity\User;
+use Random\RandomException;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -25,6 +27,13 @@ final class ApiKeyRegenerateConfirmForm extends ConfirmFormBase {
   protected ApiKeyManager $apiKeyManager;
 
   /**
+   * The current user.
+   *
+   * @var AccountProxyInterface
+   */
+  protected AccountProxyInterface $currentUser;
+
+  /**
    * ID of the user.
    *
    * @var int|string
@@ -34,8 +43,9 @@ final class ApiKeyRegenerateConfirmForm extends ConfirmFormBase {
   /**
    * Constructs the form.
    */
-  public function __construct(ApiKeyManager $apiKeyManager) {
+  public function __construct(ApiKeyManager $apiKeyManager, AccountProxyInterface $currentUser) {
     $this->apiKeyManager = $apiKeyManager;
+    $this->currentUser = $currentUser;
   }
 
   /**
@@ -43,7 +53,8 @@ final class ApiKeyRegenerateConfirmForm extends ConfirmFormBase {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('api_sentinel.api_key_manager')
+      $container->get('api_sentinel.api_key_manager'),
+      $container->get('current_user'),
     );
   }
 
@@ -68,6 +79,9 @@ final class ApiKeyRegenerateConfirmForm extends ConfirmFormBase {
    */
   public function getQuestion(): TranslatableMarkup {
     $user = User::load($this->uid);
+    if ($this->currentUser->id() == $user->id()) {
+      return $this->t('Are you sure you want to regenerate your API key?');
+    }
     return $this->t('Are you sure you want to regenerate the API key for %user?', ['%user' => $user->getDisplayName()]);
   }
 
@@ -75,28 +89,34 @@ final class ApiKeyRegenerateConfirmForm extends ConfirmFormBase {
    * {@inheritdoc}
    */
   public function getCancelUrl(): Url {
-    return new Url('api_sentinel.admin');
+    return $this->currentUser->hasPermission('administer api keys') ?
+      new Url('api_sentinel.dashboard') :
+      new Url('api_sentinel.overview');
   }
 
   /**
    * {@inheritdoc}
+   * @throws RandomException
    */
   public function submitForm(array &$form, FormStateInterface $form_state): void {
 
     $user = User::load($this->uid);
 
     if ($user) {
-      $newApiKey = $this->apiKeyManager->regenerateApiKey($user);
+      $this->apiKeyManager->regenerateApiKey($user);
 
-      $this->messenger()->addStatus($this->t('New API key for %user: %key', [
-        '%user' => $user->getDisplayName(),
-        '%key' => $newApiKey,
+      $this->messenger()->addStatus($this->t('New API key for %user.', [
+        '%user' => $user->getDisplayName()
       ]));
     } else {
       $this->messenger()->addError($this->t('Invalid user selection.'));
     }
 
-    $form_state->setRedirectUrl(new Url('api_sentinel.admin'));
+    if ($this->currentUser->hasPermission('administer api keys')) {
+      $form_state->setRedirect('api_sentinel.dashboard');
+    } else {
+      $form_state->setRedirect('api_sentinel.overview');
+    }
   }
 
 }

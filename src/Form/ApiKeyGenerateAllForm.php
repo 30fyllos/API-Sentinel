@@ -17,9 +17,9 @@ class ApiKeyGenerateAllForm extends FormBase {
   /**
    * The API Key Manager service.
    *
-   * @var \Drupal\api_sentinel\Service\ApiKeyManager
+   * @var ApiKeyManager
    */
-  protected $apiKeyManager;
+  protected ApiKeyManager $apiKeyManager;
 
   /**
    * Constructs the form.
@@ -32,7 +32,9 @@ class ApiKeyGenerateAllForm extends FormBase {
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container) {
-    return new static($container->get('api_sentinel.api_key_manager'));
+    return new static(
+      $container->get('api_sentinel.api_key_manager')
+    );
   }
 
   /**
@@ -105,7 +107,8 @@ class ApiKeyGenerateAllForm extends FormBase {
    * Handles form submission.
    * @throws RandomException
    */
-  public function submitForm(array &$form, FormStateInterface $form_state) {
+  public function submitForm(array &$form, FormStateInterface $form_state): void
+  {
     $selected_roles = array_filter($form_state->getValue('roles')); // Remove empty values
 
     if (empty($selected_roles)) {
@@ -113,12 +116,12 @@ class ApiKeyGenerateAllForm extends FormBase {
       return;
     }
 
-    $expires = $form_state->getValue('expires') ? strtotime($form_state->getValue('expires') . ' 23:59:59') : NULL;
+    $expires = $form_state->getValue('expires') ? strtotime($form_state->getValue('expires')) : NULL;
 
     $count = $this->apiKeyManager->generateApiKeysForAllUsers($selected_roles, $expires);
 
     if ($count > 0) {
-      $this->messenger()->addStatus($this->t('%count API keys generated for users.', ['%count' => $count]));
+      $this->messenger()->addStatus($this->t('%count API keys generated for users.<br>', ['%count' => $count]));
     } else {
       $this->messenger()->addWarning($this->t('No API keys were generated. Ensure users have the selected roles.'));
     }

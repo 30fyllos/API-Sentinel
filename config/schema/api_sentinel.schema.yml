@@ -45,9 +45,23 @@ api_sentinel.settings:
     max_rate_limit_time:
       type: string
       label: 'Rate Limit Time Period'
-    use_encryption:
-      type: boolean
-      label: 'Encrypt API keys'
     encryption_key:
       type: string
       label: 'Secret Key'
+    encryption_key_hash:
+      type: string
+      label: 'Secret Key Hash'
+    auto_generate:
+      type: boolean
+      label: 'Auto-Generate API keys'
+    auto_generate_roles:
+      type: sequence
+      label: 'Roles to Auto-Generate'
+      sequence:
+        type: string
+    auto_generate_duration:
+      type: int
+      label: 'Auto-Generate Duration'
+    auto_generate_duration_unit:
+      type: int
+      label: 'Auto-Generate Duration Unit'

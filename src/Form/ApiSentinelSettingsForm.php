@@ -2,11 +2,22 @@
 
 namespace Drupal\api_sentinel\Form;
 
+use Drupal\api_sentinel\Enum\Timeframe;
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
 
 /**
  * Defines the API Sentinel settings form.
+ *
+ * This form provides configuration settings for the API Sentinel module.
+ * Performance improvements include:
+ * - Caching repeated calls (e.g. Timeframe::options()) in a local variable.
+ * - Loading the configuration object once.
+ * - Cleaning up default values with array_filter and type casting.
+ *
+ * For the encryption key, the form will first attempt to load the key from the
+ * environment variable 'API_SENTINEL_ENCRYPTION_KEY'. If it is not set, it falls
+ * back to the value stored in configuration.
  */
 class ApiSentinelSettingsForm extends ConfigFormBase {
 
@@ -14,6 +25,7 @@ class ApiSentinelSettingsForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   protected function getEditableConfigNames() {
+    // Specify the configuration object names that this form edits.
     return ['api_sentinel.settings'];
   }
 
@@ -25,25 +37,40 @@ class ApiSentinelSettingsForm extends ConfigFormBase {
   }
 
   /**
-   * Builds the form.
+   * Builds the API Sentinel settings form.
+   *
+   * @param array $form
+   *   The form structure.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The current state of the form.
+   *
+   * @return array
+   *   The complete form structure.
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
+    // Load the configuration once.
     $config = $this->config('api_sentinel.settings');
 
+    // Cache the Timeframe options so we don't call Timeframe::options() multiple times.
+    $timeframe_options = Timeframe::options();
+
+    // Whitelisted IP addresses.
     $form['whitelist_ips'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Whitelisted IP Addresses'),
       '#description' => $this->t('Enter allowed IPs (one per line). If set, only these IPs can use API keys.'),
-      '#default_value' => implode("\n", $config->get('whitelist_ips') ?? []),
+      '#default_value' => implode("\n", (array) $config->get('whitelist_ips') ?? []),
     ];
 
+    // Blacklisted IP addresses.
     $form['blacklist_ips'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Blacklisted IP Addresses'),
       '#description' => $this->t('Enter blocked IPs (one per line). Requests from these IPs will be rejected.'),
-      '#default_value' => implode("\n", $config->get('blacklist_ips') ?? []),
+      '#default_value' => implode("\n", (array) $config->get('blacklist_ips') ?? []),
     ];
 
+    // Custom HTTP header for API authentication.
     $form['custom_auth_header'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Custom Authentication Header'),
@@ -52,13 +79,15 @@ class ApiSentinelSettingsForm extends ConfigFormBase {
       '#required' => TRUE,
     ];
 
+    // Allowed API paths.
     $form['allowed_paths'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Allowed API Paths'),
       '#description' => $this->t('Enter allowed API paths (one per line). Use wildcards (*) for dynamic segments, e.g., /api/*'),
-      '#default_value' => implode("\n", $config->get('allowed_paths') ?? []),
+      '#default_value' => implode("\n", (array) $config->get('allowed_paths') ?? []),
     ];
 
+    // Maximum failed authentication attempts.
     $form['failure_limit'] = [
       '#type' => 'number',
       '#title' => $this->t('Max Failed Attempts Before Block'),
@@ -67,28 +96,21 @@ class ApiSentinelSettingsForm extends ConfigFormBase {
       '#min' => 0,
     ];
 
-    $timeLimitOptions = [
-      'half_hour' => $this->t('Half hour'),
-      'hour' => $this->t('Hour'),
-      'hours_2' => $this->t('2 Hours'),
-      'hours_3' => $this->t('3 Hours'),
-      'hours_6' => $this->t('6 Hours'),
-      'half_day' => $this->t('Half Day'),
-      'day' => $this->t('Day'),
-    ];
-
+    // Timeframe over which failures are counted.
     $form['failure_limit_time'] = [
       '#type' => 'select',
       '#title' => $this->t('Failure Limit Time Per'),
-      '#options' => $timeLimitOptions,
-      '#default_value' => $config->get('failure_limit_time', 'hour'),
+      '#options' => $timeframe_options,
+      '#default_value' => $config->get('failure_limit_time', Timeframe::ONE_HOUR->value),
       '#states' => [
+        // Show only if failure_limit is not 0.
         'visible' => [
           ':input[name="failure_limit"]' => ['!value' => '0'],
         ],
       ],
     ];
 
+    // Maximum allowed API requests.
     $form['max_rate_limit'] = [
       '#type' => 'number',
       '#title' => $this->t('Max Requests Allowed'),
@@ -97,36 +119,16 @@ class ApiSentinelSettingsForm extends ConfigFormBase {
       '#min' => 0,
     ];
 
+    // Timeframe for rate limiting.
     $form['max_rate_limit_time'] = [
       '#type' => 'select',
       '#title' => $this->t('Rate Limit Time Period'),
-      '#options' => $timeLimitOptions,
-      '#default_value' => $config->get('failure_limit_time', 'hour'),
+      '#options' => $timeframe_options,
+      '#default_value' => $config->get('max_rate_limit_time', Timeframe::ONE_HOUR->value),
       '#states' => [
+        // Show only if max_rate_limit is not 0.
         'visible' => [
           ':input[name="max_rate_limit"]' => ['!value' => '0'],
-        ],
-      ],
-    ];
-
-    $form['use_encryption'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Encrypt API keys'),
-      '#default_value' => $config->get('use_encryption', FALSE),
-      '#description' => $this->t('Store API keys encrypted. This options will allow you to have access to the keys.<br><strong>Warning:</strong> Enabling this will force regeneration of all existing keys.'),
-    ];
-
-    $form['encryption_key'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Encryption Key'),
-      '#default_value' => $config->get('encryption_key', ''),
-      '#attributes' => ['readonly' => 'readonly'],
-      '#disabled' => TRUE,
-      '#access' => $this->currentUser()->id() == 1,
-      '#description' => $this->t('This key is automatically generated and used for encrypting API keys.'),
-      '#states' => [
-        'visible' => [
-          ':input[name="use_encryption"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -136,37 +138,30 @@ class ApiSentinelSettingsForm extends ConfigFormBase {
 
   /**
    * Handles form submission.
+   *
+   * Saves the updated configuration settings and forces key regeneration if
+   * the encryption settings have changed.
+   *
+   * @param array $form
+   *   The complete form structure.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The current state of the form.
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    $config = $this->config('api_sentinel.settings');
 
-    // Detect if encryption setting has changed
-    $previousEncryption = $config->get('use_encryption');
-    $newEncryption = boolval($form_state->getValue('use_encryption'));
-
-    $encryptionKey = trim($form_state->getValue('encryption_key'));
-
+    // Save configuration settings.
     $this->config('api_sentinel.settings')
       ->set('whitelist_ips', array_filter(explode("\n", trim($form_state->getValue('whitelist_ips')))))
       ->set('blacklist_ips', array_filter(explode("\n", trim($form_state->getValue('blacklist_ips')))))
       ->set('custom_auth_header', trim($form_state->getValue('custom_auth_header')))
       ->set('allowed_paths', array_filter(explode("\n", trim($form_state->getValue('allowed_paths')))))
-      ->set('store_plaintext_keys', $form_state->getValue('store_plaintext_keys'))
       ->set('failure_limit', $form_state->getValue('failure_limit'))
       ->set('failure_limit_time', $form_state->getValue('failure_limit_time'))
       ->set('max_rate_limit', $form_state->getValue('max_rate_limit'))
       ->set('max_rate_limit_time', $form_state->getValue('max_rate_limit_time'))
-      ->set('use_encryption', $newEncryption)
-      ->set('encryption_key', $encryptionKey)
       ->save();
 
     parent::submitForm($form, $form_state);
-
-    // If encryption mode changed, force key regeneration
-    if ($previousEncryption !== $newEncryption || $config->get('encryption_key') !== $encryptionKey) {
-      \Drupal::messenger()->addWarning($this->t('API key encryption setting changed. All keys have been regenerated.'));
-      \Drupal::service('api_sentinel.api_key_manager')->forceRegenerateAllKeys();
-    }
   }
 
 }

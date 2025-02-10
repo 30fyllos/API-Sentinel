@@ -20,12 +20,12 @@ function api_sentinel_schema() {
         ],
         'api_key' => [
           'type' => 'varchar',
-          'length' => 256,
+          'length' => 128,
           'not null' => TRUE,
         ],
-        'api_key_sample' => [
+        'data' => [
           'type' => 'varchar',
-          'length' => 6,
+          'length' => 128,
           'not null' => TRUE,
         ],
         'created' => [
@@ -48,9 +48,8 @@ function api_sentinel_schema() {
         'id'
       ],
       'indexes' => [
-        'uid' => [
-          'uid'
-        ]
+        'uid' => ['uid'],
+        'api_key' => ['api_key']
       ],
     ],
     'api_sentinel_usage' => [
@@ -77,9 +76,7 @@ function api_sentinel_schema() {
       ],
       'primary key' => ['id'],
       'indexes' => [
-        'key_id' => [
-          'key_id'
-        ]
+        'key_id' => ['key_id']
       ],
     ],
   ];
@@ -105,7 +102,10 @@ function api_sentinel_install(): void
 
   $config = \Drupal::configFactory()->getEditable('api_sentinel.settings');
   if (!$config->get('encryption_key')) {
-    $config->set('encryption_key', base64_encode(random_bytes(32)))->save();
+    $generatedKey = base64_encode(random_bytes(32));
+    $config->set('encryption_key', $generatedKey)
+      ->set('encryption_key_hash', hash('sha256', $generatedKey))
+      ->save();
   }
 }
 
